@@ -1,0 +1,212 @@
+name: publicos_desktop
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Localization. Desktop mirrors publicos_client's GENERATED localizations
+  # (lib/l10n/app_localizations*.dart, copied byte-identical) so every widget
+  # ported from the client compiles untouched -- `context.l10n.x` resolves here
+  # exactly as it does there. Without this, each ported file would need its
+  # strings hand-swapped to literals: the only hand-edit surface in an otherwise
+  # verbatim port, and the one class of typo the compiler cannot catch.
+  flutter_localizations:
+    sdk: flutter
+
+  publicos_core:
+    git:
+      url: https://github.com/PublicOS-dev/PublicOS_Core.git
+
+  # The website-to-wallet bridge, shared with publicos_client so the signing
+  # path exists exactly once. Knows nothing about the engine below it.
+  publicos_web3_bridge:
+    git:
+      url: https://github.com/PublicOS-dev/publicos_web3_bridge.git
+
+  # The embedded webview. Exists because `webview_flutter` ships NO Windows
+  # implementation -- same reason as zero_video_windows. Audited fork of
+  # webview_flutter_windows, pinned; see its FORK.md.
+  # ⚠ Raises the build floor to VS 2022+.
+  zero_webview_windows:
+    git:
+      url: https://github.com/PublicOS-dev/zero_webview_windows.git
+
+  shared_preferences: ^2.3.4
+  # DWM title-bar tint (utils/window_chrome.dart) — two dwmapi attribute writes
+  # via dart:ffi; this is just the allocator/Utf16 helpers, not a window package.
+  ffi: ^2.1.0
+  url_launcher: ^6.3.1
+  qr_flutter: ^4.1.0
+  wallet: ^0.0.18
+  web3dart: ^3.0.2
+  zero_cached_image: ^1.5.0
+
+  # Feed/message video. zero_cached_video is the same widget the client uses;
+  # zero_video_windows supplies the VideoPlayerPlatform implementation that the
+  # official video_player does NOT ship for Windows (android/ios/macos/web only),
+  # so it must be registered in main() before any controller is built.
+  zero_cached_video: ^0.2.0
+  video_player: ^2.9.0
+  zero_video_windows:
+    git:
+      url: https://github.com/PublicOS-dev/zero_video_windows.git
+      path: packages/zero_video_windows
+  # Video poster frames. Used directly by VideoUrlThumbnail / NaturalRatioMedia
+  # (aspect-ratio probing) and transitively by zero_cached_video. Overridden
+  # to its public repo below.
+  zero_cached_thumbnail: ^0.1.0
+  # On-chain NFT art is often inline SVG (data:image/svg+xml); flutter_svg
+  # renders it. Used by NftImage (mirrors publicos_client).
+  flutter_svg: ^2.0.17
+  file_picker: ^8.0.0
+  # keychain_dialog restore-backup flow (client parity): the client picks the
+  # XMTP DB backup with file_selector's openFile — path-based, which dodges the
+  # Windows file_picker null-bytes gotcha. Endorsed Windows impl exists.
+  file_selector: ^1.0.3
+  http: ^1.2.0
+  # Used directly by the ported feeds tree (posts_list reads drift's `Value`;
+  # natural_ratio_media hashes URLs for its aspect cache and writes it under the
+  # app support dir). All three arrive transitively through publicos_core, but a
+  # direct import deserves a direct dependency -- otherwise an upstream package
+  # dropping one silently breaks the build here.
+  drift: ^2.28.0
+  crypto: ^3.0.3
+  path_provider: ^2.1.5
+  # utils/image_utils: the client compresses inline attachments
+  # with flutter_image_compress, which has NO Windows impl — the desktop twin
+  # runs on the pure-Dart image package instead (was already transitive).
+  image: ^4.1.7
+  # Pinned to match publicos_client (and what flutter_localizations resolves to);
+  # the generated AppLocalizations uses intl's number/date formatting.
+  intl: ^0.20.2
+  # XMTP messaging
+  xmtp_plugin: ^1.1.0
+  audioplayers: ^6.0.0
+
+  # @-mentions (wire format `@[0xAddr]`, styled controller + parser), same
+  # package publicos_client uses.
+  zero_mentions:
+    git:
+      url: https://github.com/PublicOS-dev/zero_mentions.git
+  # XFile — the type `compose_post_page._uploadOne` takes. The client gets it
+  # transitively through image_picker; desktop's media_picker delta is built on
+  # file_picker instead (image_picker's pickMedia/pickMultipleMedia have no
+  # Windows implementation), so the type is depended on directly.
+  cross_file: ^0.3.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^5.0.0
+
+# zero_cached_video and zero_cached_thumbnail resolve from their public repos
+# (same sources publicos_client uses).
+dependency_overrides:
+  zero_cached_video:
+    git:
+      url: https://github.com/PublicOS-dev/zero_cached_video.git
+  zero_cached_thumbnail:
+    git:
+      url: https://github.com/PublicOS-dev/zero_cached_thumbnail.git
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # XMTP badge on GlassContactIcon (XMTP-only contacts, no chain account).
+  assets:
+    - assets/xmtp.jpg
+    # System-app tile art: Fluent-style transparent *.png, same files as publicos_client.
+    # The old papercraft *.jpg files stay alongside in both apps, unreferenced.
+    - assets/system_apps/
+    # Onboarding outro tiles (Manual / Support), same files as publicos_client.
+    - assets/onboarding/
+
+  # Brand font — as in publicos_client, all non-mono text
+  # uses bundled SpaceGrotesk. Applied globally via ThemeData.fontFamily.
+  fonts:
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Light.ttf
+          weight: 300
+        - asset: assets/fonts/SpaceGrotesk-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
+
+  # To add assets to your application, add an assets section, like this:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

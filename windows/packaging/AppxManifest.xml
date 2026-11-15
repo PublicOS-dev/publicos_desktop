@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  Sparse package ("packaging with external location") for publicos_desktop.
+
+  WHAT THIS IS FOR
+  ================
+  It grants the app a PACKAGE IDENTITY without turning it into an MSIX. The
+  .exe keeps living in its normal Flutter build output; this manifest only
+  points at it. Identity is the hard prerequisite for `windows.appUriHandler`,
+  which is the Windows equivalent of Android App Links / iOS Universal Links.
+
+  Two extensions are declared, and they are NOT the same mechanism:
+
+    windows.appUriHandler   https://publicos.dev/...   <- the universal link
+    windows.protocol        publicos://...             <- the custom scheme
+
+  The first is the goal. The second is here on purpose for two reasons:
+  it is four lines in the same file, it is the "send to my device" button the
+  web page will eventually offer (a custom scheme is the ONLY thing that
+  escapes a browser), and it doubles as a CONTROL - if `publicos://` activates
+  us and https does not, the failure is in the appUriHandler validation, not in
+  our activation code.
+
+  THE LIMIT
+  =========
+  appUriHandler NEVER fires from a modern browser. Microsoft excludes Edge
+  Chromium / Firefox / IE by design; only the dead Edge Legacy honoured it.
+  It fires from ShellExecuteEx, LaunchUriAsync, the Run dialog, native desktop
+  clients - and from our own url_launcher, which is what makes it useful.
+
+  REGISTERING IT
+  ==============
+  Run windows/packaging/Register-Identity.ps1 (needs Developer Mode, which
+  lets it register unsigned and without admin). Production distribution would
+  need this signed into a real .msix instead.
+
+  Identity.Name / Publisher are ours to choose while sideloading, BUT the
+  Publisher string must exactly match the signing certificate subject the day
+  we sign. Changing either one changes the PackageFamilyName, which is what
+  the windows-app-web-link file on publicos.dev will have to carry.
+-->
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap10 rescap">
+
+  <Identity
+    Name="PublicOS.Desktop"
+    Publisher="CN=PublicOS"
+    Version="1.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>PublicOS</DisplayName>
+    <PublisherDisplayName>PublicOS</PublisherDisplayName>
+    <Logo>assets\StoreLogo.png</Logo>
+    <!-- THE sparse-package marker: the payload lives outside the package. -->
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+
+  <Dependencies>
+    <!--
+      10.0.19041.0 = Windows 10 2004. That is the floor for packaging with
+      external location AND for GetActivatedEventArgs on such a package,
+      so it is the real minimum, not a guess.
+    -->
+    <TargetDeviceFamily
+      Name="Windows.Desktop"
+      MinVersion="10.0.19041.0"
+      MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!--
+      Executable is resolved against the ExternalLocationUri supplied at
+      registration time (the Flutter Release folder), not against the package.
+      EntryPoint must be Windows.FullTrustApplication for a Win32 app.
+    -->
+    <Application
+      Id="PublicOSDesktop"
+      Executable="publicos_desktop.exe"
+      EntryPoint="Windows.FullTrustApplication">
+
+      <uap:VisualElements
+        DisplayName="PublicOS"
+        Description="PublicOS desktop client"
+        Square150x150Logo="assets\Square150x150Logo.png"
+        Square44x44Logo="assets\Square44x44Logo.png"
+        BackgroundColor="transparent" />
+
+      <Extensions>
+
+        <!-- ============ THE UNIVERSAL LINK ============
+             Claims https://publicos.dev. Every host is separate: publicos.dev
+             and www.publicos.dev are NOT the same claim, so both are listed.
+             While sideloaded these validate automatically on install; for real
+             distribution publicos.dev must serve /.well-known/windows-app-web-link
+             (no .json suffix) carrying this package's PackageFamilyName. -->
+        <uap3:Extension Category="windows.appUriHandler">
+          <uap3:AppUriHandler>
+            <uap3:Host Name="publicos.dev" />
+            <uap3:Host Name="www.publicos.dev" />
+          </uap3:AppUriHandler>
+        </uap3:Extension>
+
+        <!-- ============ THE CUSTOM SCHEME (control + the future
+             "send to my device" door) ============
+             Unlike the block above, this DOES fire from a browser, after the
+             "Open PublicOS?" prompt. Kept deliberately narrow: it is the
+             QR/action family, not a second sharing grammar. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="publicos">
+            <uap:DisplayName>PublicOS</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>
