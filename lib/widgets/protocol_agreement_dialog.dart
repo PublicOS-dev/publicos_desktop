@@ -45,6 +45,10 @@ class _ProtocolAgreementDialog extends StatefulWidget {
 class _ProtocolAgreementDialogState extends State<_ProtocolAgreementDialog> {
   final ScrollController _scroll = ScrollController();
   bool _reachedEnd = false;
+  // Protocol agreement v2 clause 3: 16 and old enough under
+  // local law. ACCEPT stays disabled until this box is ticked (twin of the
+  // mobile ProtocolAgreementReader).
+  bool _ageOk = false;
 
   @override
   void initState() {
@@ -167,14 +171,45 @@ class _ProtocolAgreementDialogState extends State<_ProtocolAgreementDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => setState(() => _ageOk = !_ageOk),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _ageOk
+                                ? Icons.check_box_rounded
+                                : Icons.check_box_outline_blank_rounded,
+                            size: 22,
+                            color: _ageOk ? tokens.starkWhite : tokens.textDim,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              l10n.protocolAgreementAgeCheck,
+                              style: TextStyle(
+                                fontFamily: 'SpaceGrotesk',
+                                color: tokens.starkWhite,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     height: 48,
                     child: _reachedEnd
                         ? SystemAppActionButton(
                             label: l10n.protocolAgreementAccept,
                             icon: Icons.check_rounded,
-                            onTap: () => Navigator.of(context).pop(true),
+                            onTap: _ageOk ? () => Navigator.of(context).pop(true) : null,
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,

@@ -1057,7 +1057,6 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
           ? await PublicOSContacts.setRecord(Record.asProfile(
               key: key,
               value: 'true',
-              expiration: DateTime.now().add(const Duration(days: 5 * 365)),
             ))
           : await PublicOSContacts.deleteRecord(key);
       if (!ok) throw StateError('account tag $key not written');
@@ -1112,7 +1111,6 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
         // written by the old settings screen still parse.
         value: color.toARGB32().toString(),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       ));
       if (!mounted) return;
       setState(() => _actionStatus = l10n.acctSettingsRefreshingProfile);

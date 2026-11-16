@@ -284,7 +284,6 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
         key: _titleKey,
         value: size.toString(),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(_titleKey, record);
     } catch (_) {}
@@ -296,7 +295,6 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
         key: _bodyKey,
         value: size.toString(),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(_bodyKey, record);
     } catch (_) {}
@@ -310,7 +308,6 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
         key: _trimKey,
         value: chars.toString(),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(_trimKey, record);
     } catch (_) {}
@@ -322,7 +319,6 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
         key: _layoutKey,
         value: mode.name,
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(_layoutKey, record);
     } catch (_) {}
@@ -337,7 +333,6 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
         key: kReadingWidthKey,
         value: encodeReadingWidth(width),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(kReadingWidthKey, record);
     } catch (_) {}

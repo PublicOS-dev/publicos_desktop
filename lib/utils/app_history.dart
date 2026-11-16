@@ -134,7 +134,6 @@ class RecentApps extends ChangeNotifier {
           key: _seededKey,
           value: 'true',
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 3650)),
           isExpired: false,
         ),
       );

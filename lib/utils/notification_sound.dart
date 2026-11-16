@@ -50,7 +50,6 @@ class NotificationSound {
     final record = Record.asSettings(
       key: _settingKey,
       value: value.toString(),
-      expiration: DateTime.now().add(const Duration(days: 365)),
       isExpired: false,
       isSystem: true,
     );

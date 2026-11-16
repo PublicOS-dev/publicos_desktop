@@ -17,6 +17,7 @@ import 'package:publicos_desktop/widgets/feeds/pin_post.dart';
 import 'package:publicos_desktop/widgets/feeds/post_source_details_page.dart';
 import 'package:publicos_desktop/widgets/feeds/post_vote_buttons.dart';
 import 'package:publicos_desktop/widgets/feeds/emoji_picker_dialog.dart';
+import 'package:publicos_desktop/widgets/feeds/reaction_button.dart';
 import 'package:publicos_desktop/widgets/feeds/reaction_quick_bar.dart';
 import 'package:publicos_desktop/widgets/feeds/feed_favicon.dart';
 import 'package:publicos_desktop/widgets/feeds/mention_text.dart';
@@ -216,7 +217,13 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard>
     with SingleTickerProviderStateMixin {
-  bool _isReacting = false;
+  /// Emojis whose add is on the wire, so a second tap sends nothing.
+  final Set<String> _reactingEmojis = {};
+
+  /// Bumped on every add the reader makes, from anywhere (the heart, the
+  /// double tap, the sheet, the hold pill): [ReactionButton] plays the jelly
+  /// on it.
+  int _reactPulse = 0;
 
   /// Drives the avatar/name loading shimmer; runs only while
   /// [_authorSlotPending] so settled cards cost nothing.
@@ -701,15 +708,6 @@ class _PostCardState extends State<PostCard>
   // the reading setting is.
   static const double _wideVideoBannerMaxHeight = 620;
 
-  // Reactions collapse once a post carries this many distinct emojis, so the
-  // action row can never spill onto a second line. Reactions group from the
-  // 2nd different emoji, under a single counter, in posts and comments.
-  static const int _reactionCollapseThreshold = 2;
-  static const int _reactionClusterSize = 4;
-  // How much of its own width each clustered emoji keeps. Below 1.0 the glyph
-  // tucks under its left neighbour, which is how the tight stack reads without
-  // hardcoding a glyph advance width (it varies by platform + emoji font).
-  static const double _reactionOverlapFactor = 0.74;
 
   /// Vertical gap above a content block, keyed on the preceding block. This is
   /// the single source of the under-author rhythm, identical in both layout
@@ -898,12 +896,10 @@ class _PostCardState extends State<PostCard>
   /// A double tap only ever ADDS the heart. The server's reaction verb is a
   /// toggle, so when it answers "removed" (the heart was already there) it
   /// is put straight back; the burst plays either way.
-  /// Whether the reader's heart is on this post: this session's optimistic
+  /// Whether the reader has [emoji] on this post: this session's optimistic
   /// answer first (a removal wins over a stale yes), else the server's own
   /// word, `viewerReactions`, which a signed interactions read fills.
-  /// "Heart" = the reader's double-tap emoji (`ReactionPrefs`), ❤️ by default.
-  bool _hasHeart(Post post) =>
-      _hasReaction(post, ReactionPrefs.doubleTapEmojiSync);
+  /// Per emoji; the double tap asks about the reader's default (`ReactionPrefs`).
 
   bool _hasReaction(Post post, String emoji) {
     final optimistic = _optimisticReactions[emoji];
@@ -911,20 +907,59 @@ class _PostCardState extends State<PostCard>
     return post.viewerReactions?.contains(emoji) ?? false;
   }
 
-  Future<void> _likeByDoubleTap(Post post) =>
+  /// The reader's emojis on this post, in the order they were added: the
+  /// server's `viewerReactions`, minus this session's removals, plus its adds.
+  /// Empty = the button shows the empty heart.
+  List<String> _myEmojis(Post post) {
+    final out = <String>[
+      for (final e in post.viewerReactions ?? const <String>[])
+        if (_optimisticReactions[e] != false) e,
+    ];
+    for (final entry in _optimisticReactions.entries) {
+      if (entry.value && !out.contains(entry.key)) out.add(entry.key);
+    }
+    return out;
+  }
+
+  /// Sets the reader's [emoji] on or off in this session's layer. The layer
+  /// is a delta over the server's word (`viewerReactions` + the counts): a
+  /// change that lands back on the server's state CLEARS the entry, never
+  /// stacks on it. Stacking would double count: remove in the sheet (entry
+  /// false, count 0), tap the heart (entry overwritten true) = the server's
+  /// 1 + 1 = 2.
+  void _markMine(Post post, String emoji, bool on) {
+    final server = post.viewerReactions?.contains(emoji) ?? false;
+    if (on == server) {
+      _optimisticReactions.remove(emoji);
+    } else {
+      _optimisticReactions[emoji] = on;
+    }
+  }
+
+  Future<bool> _likeByDoubleTap(Post post) =>
       _addReaction(post, ReactionPrefs.doubleTapEmojiSync);
 
   /// ADD-only (the double tap and the quick bar): the server's
   /// verb is a toggle, so an answer of "removed" is toggled straight back.
-  Future<void> _addReaction(Post post, String emoji) async {
-    if (!PublicOSChannels.canReact(post)) return;
+  ///
+  /// Every add bumps [_reactPulse], so the jelly plays on the reaction button
+  /// whatever started it. True = the reaction is on (or already was).
+  Future<bool> _addReaction(Post post, String emoji) async {
+    if (!PublicOSChannels.canReact(post)) return false;
     // Already on, by the server's word or this session's: nothing to send.
-    if (_isReacting || _hasReaction(post, emoji)) return;
+    if (_hasReaction(post, emoji)) return true;
+    if (_reactingEmojis.contains(emoji)) return true;
     HapticFeedback.mediumImpact();
+    final before = _optimisticReactions[emoji];
+    void restore() => before == null
+        ? _optimisticReactions.remove(emoji)
+        : _optimisticReactions[emoji] = before;
     setState(() {
-      _isReacting = true;
-      _optimisticReactions[emoji] = true;
+      _reactingEmojis.add(emoji);
+      _markMine(post, emoji, true);
+      _reactPulse++;
     });
+    var ok = true;
     try {
       final added =
           await PublicOSChannels.toggleReaction(post: post, emoji: emoji);
@@ -934,15 +969,17 @@ class _PostCardState extends State<PostCard>
         if (mounted) setState(() => _optimisticReactions.remove(emoji));
       }
     } catch (e) {
+      ok = false;
       if (mounted) {
-        setState(() => _optimisticReactions.remove(emoji));
+        setState(restore);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(localizedError(context.l10n, e))),
         );
       }
     } finally {
-      if (mounted) setState(() => _isReacting = false);
+      if (mounted) setState(() => _reactingEmojis.remove(emoji));
     }
+    return ok;
   }
 
   /// The card-wide hold opens the reaction quick bar at the pointer, five
@@ -1407,7 +1444,8 @@ class _PostCardState extends State<PostCard>
           for (final v in _optimisticReactions.values) {
             total += v ? 1 : -1;
           }
-          final hearted = _hasHeart(post);
+          final mine = _myEmojis(post);
+          final hearted = mine.isNotEmpty;
           return Align(
             alignment: Alignment.bottomRight,
             child: Padding(
@@ -1422,11 +1460,19 @@ class _PostCardState extends State<PostCard>
                     icon: hearted
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    emoji: ReactionPrefs.doubleTapEmojiSync == ReactionPrefs.heart
-                        ? null
-                        : ReactionPrefs.doubleTapEmojiSync,
+                    // Reacted: the reader's own first emoji; not yet: their
+                    // default (the heart glyph when it is ❤️).
+                    emoji: hearted
+                        ? (mine.first == ReactionPrefs.heart ? null : mine.first)
+                        : (ReactionPrefs.doubleTapEmojiSync == ReactionPrefs.heart
+                            ? null
+                            : ReactionPrefs.doubleTapEmojiSync),
                     count: total,
-                    onTap: () => _likeByDoubleTap(post),
+                    // The single button's rule: not reacted yet
+                    // = react; reacted = the reactions sheet.
+                    onTap: () => hearted
+                        ? _showReactionDetails(context, post, null)
+                        : _likeByDoubleTap(post),
                   ),
                   // Not on the focused post: the reader is already in the
                   // comments (the page passes `showCommentsIndicator: false`,
@@ -2573,15 +2619,15 @@ class _PostCardState extends State<PostCard>
     final showComments =
         widget.showCommentsIndicator && post.commentPolicy != 'closed';
     final canReact = PublicOSChannels.canReact(post);
-    final chips = _reactionChips(post, tokens, canReact);
-    // Wide mode: the first chip's GLYPH starts on the avatar's edge, not its
-    // padded box. Chips (and the cluster) lead with `_chipHPad`; with no
-    // reactions yet the add button is first, with `_addReactionHPad`.
-    final leadInset = !isWide || chips.isEmpty
+    final displayed = _displayedReactions(post);
+    final mine = _myEmojis(post);
+    final hasButton = canReact || displayed.isNotEmpty;
+    // Wide mode: the first GLYPH starts on the avatar's edge, not its padded
+    // box: the empty heart leads with `_addReactionHPad`, the emojis with
+    // `_chipHPad` (the button's group padding).
+    final leadInset = !isWide || !hasButton
         ? 0.0
-        : (post.parsedReactions.isEmpty && _optimisticReactions.isEmpty
-            ? _addReactionHPad
-            : _chipHPad);
+        : (canReact && mine.isEmpty ? _addReactionHPad : _chipHPad);
     final showVote =
         isWide && (widget.showVoting || widget.post.isForumChannel == true);
     final showLaunch =
@@ -2594,15 +2640,39 @@ class _PostCardState extends State<PostCard>
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: chips.isEmpty
+          child: !hasButton
               ? const SizedBox.shrink()
               : Transform.translate(
                   offset: Offset(-leadInset, 0),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: chips,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    // One button: the
+                    // empty heart while the reader hasn't reacted, the top
+                    // emojis, the total. Heart = react; emojis/count = sheet.
+                    child: ReactionButton(
+                      reactions: displayed,
+                      mine: mine,
+                      canReact: canReact,
+                      pulse: _reactPulse,
+                      onHeart: () => _likeByDoubleTap(post),
+                      onOpen: () => _showReactionDetails(context, post, null),
+                      // Long press / long left click: the quick row grows out
+                      // of the pressed part.
+                      onLongPress: canReact
+                          ? (anchor) => ReactionQuickBar.show(
+                                anchor,
+                                onPick: (e) => _addReaction(post, e),
+                                onMore: () => _showEmojiPicker(context, post),
+                              )
+                          : null,
+                      // 26 so the react hitbox is big enough to hit; the
+                      // emoji 18 / count 16 of the chips.
+                      heartSize: 26,
+                      emojiSize: 18,
+                      countSize: 16,
+                      heartPadding: const EdgeInsets.symmetric(
+                          horizontal: _addReactionHPad, vertical: 2),
+                    ),
                   ),
                 ),
         ),
@@ -2728,9 +2798,6 @@ class _PostCardState extends State<PostCard>
     );
   }
 
-  /// Build the list of reaction chips (existing emojis with optimistic state
-  /// applied) plus the trailing "+ add reaction" button. Returns an empty
-  /// list when there are no reactions and the user can't react.
   /// The reactions the card is showing right now: the server's counts plus
   /// this session's optimistic toggles, most popular first. Feeds both the
   /// chips and the details sheet's instant first paint.
@@ -2764,132 +2831,6 @@ class _PostCardState extends State<PostCard>
     // whatever the server happened to list first.
     displayReactions.sort((a, b) => b.$2.compareTo(a.$2));
     return displayReactions;
-  }
-
-  List<Widget> _reactionChips(Post post, GlassTokens tokens, bool canReact) {
-    final displayReactions = _displayedReactions(post);
-
-    final out = <Widget>[];
-    if (displayReactions.length >= _reactionCollapseThreshold) {
-      out.add(_collapsedReactionCluster(post, tokens, displayReactions));
-      if (canReact) out.add(_addReactionButton(post, tokens));
-      return out;
-    }
-    for (final (emoji, count) in displayReactions) {
-      final isOptimistic = _optimisticReactions.containsKey(emoji);
-      // Borderless: the emoji + count reads as its
-      // own affordance; a pill outline adds chrome the row doesn't need.
-      // Optimistic state keeps its fill so a pending toggle still shows.
-      // The fill is a Material so the tap's ink draws over it.
-      out.add(Material(
-        color: isOptimistic ? tokens.glassFillHover : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => _showReactionDetails(context, post, emoji),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: _chipHPad, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 18)),
-                const SizedBox(width: 4),
-                Text(
-                  count.toString(),
-                  style: TextStyle(
-                    color: tokens.textDim,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ));
-    }
-    if (canReact) {
-      out.add(_addReactionButton(post, tokens));
-    }
-    return out;
-  }
-
-  /// The heart opens the quick bar (its four most-used + `+`), anchored to
-  /// the heart's own rect through the Builder's context; `+` is the full
-  /// picker. A pill emoji is ADD-only, like the double tap.
-  Widget _addReactionButton(Post post, GlassTokens tokens) {
-    return Builder(
-      builder: (heartCtx) => InkResponse(
-      onTap: _isReacting
-          ? null
-          : () => ReactionQuickBar.show(
-                heartCtx,
-                onPick: (emoji) => _addReaction(post, emoji),
-                onMore: () => _showEmojiPicker(context, post),
-              ),
-      radius: 22,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: _addReactionHPad, vertical: 2),
-        child: Icon(
-          Icons.favorite_border,
-          // 26, not smaller: the react hitbox must be easy to hit.
-          size: 26,
-          color: tokens.textDim.withValues(alpha: _isReacting ? 0.4 : 1.0),
-        ),
-      ),
-      ),
-    );
-  }
-
-  /// Once a post carries [_reactionCollapseThreshold] distinct emojis, the
-  /// per-emoji pills give way to a single tight cluster: the most popular
-  /// emojis overlapping left-to-right, then the total across *every* reaction
-  /// on the post — including types too unpopular to make the cluster.
-  ///
-  /// [sorted] must already be ordered most-popular-first.
-  Widget _collapsedReactionCluster(
-    Post post,
-    GlassTokens tokens,
-    List<(String, int)> sorted,
-  ) {
-    final top = sorted.take(_reactionClusterSize).toList();
-    final total = sorted.fold<int>(0, (sum, r) => sum + r.$2);
-    // Borderless to match the per-emoji chips; the fill alone marks the
-    // cluster as one tap target. A Material fill, so the tap's ink shows.
-    return Material(
-      color: tokens.glassFillHover,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        // The group opens the sheet on its All tab (null), not one emoji.
-        onTap: () => _showReactionDetails(context, post, null),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: _chipHPad, vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < top.length; i++)
-                Align(
-                  widthFactor: i == 0 ? 1.0 : _reactionOverlapFactor,
-                  alignment: Alignment.centerRight,
-                  child: Text(top[i].$1, style: const TextStyle(fontSize: 18)),
-                ),
-              const SizedBox(width: 4),
-              Text(
-                total.toString(),
-                style: TextStyle(
-                  color: tokens.textDim,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildActionItem({
@@ -3175,7 +3116,7 @@ class _PostCardState extends State<PostCard>
   /// Show emoji picker for adding reaction (glass categorized dialog)
   Future<void> _showEmojiPicker(BuildContext context, Post post) async {
     final emoji = await showEmojiPickerDialog(context);
-    if (emoji != null) _handleReaction(post, emoji);
+    if (emoji != null) _addReaction(post, emoji);
   }
 
   /// Show reaction details sheet with who reacted
@@ -3188,16 +3129,16 @@ class _PostCardState extends State<PostCard>
 
     final myAddress =
         AppStateNotifier.currentMyContact?.publicosAddress?.eip55With0x;
+    final mine = _myEmojis(post);
     final instant = [
       for (final (e, count) in _displayedReactions(post))
         MessageReactionSummary(
           emoji: e,
           count: count,
-          hasMyReaction: false,
+          hasMyReaction: mine.contains(e),
           senderInboxIds: const [],
         ),
     ];
-    if (instant.isEmpty) return;
 
     // DESKTOP DELTA: the client's bottom sheet becomes a centered card.
     // `asCard` swaps the widget's DraggableScrollableSheet shell for a plain
@@ -3234,6 +3175,9 @@ class _PostCardState extends State<PostCard>
             initialEmoji: emoji,
             currentUserId: myAddress,
             onRemoveMyReaction: (em) => _removeMyReaction(post, em),
+        // The add row: extra reactions are added here, and the
+        // card's button jellies behind the sheet.
+        onAddReaction: (em) => _addReaction(post, em),
           ),
         ),
       ),
@@ -3292,50 +3236,12 @@ class _PostCardState extends State<PostCard>
       }
       if (mounted) {
         setState(() {
-          _optimisticReactions[emoji] = false; // mark as removed
+          _markMine(post, emoji, false);
         });
       }
       return true;
     } catch (_) {
       return false;
-    }
-  }
-
-  /// Handle reaction toggle with optimistic update
-  Future<void> _handleReaction(Post post, String emoji) async {
-    if (_isReacting) return;
-
-    HapticFeedback.mediumImpact();
-
-    // Apply optimistic update immediately
-    setState(() {
-      _isReacting = true;
-      _optimisticReactions[emoji] = true; // Assume adding
-    });
-
-    try {
-      await PublicOSChannels.toggleReaction(
-        post: post,
-        emoji: emoji,
-      );
-
-      // Success - keep optimistic state visible (it will persist until feed refresh)
-      if (mounted) {
-        setState(() {
-          _isReacting = false;
-        });
-      }
-    } catch (e) {
-      // Rollback optimistic update on failure
-      if (mounted) {
-        setState(() {
-          _optimisticReactions.remove(emoji);
-          _isReacting = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(localizedError(context.l10n, e))),
-        );
-      }
     }
   }
 

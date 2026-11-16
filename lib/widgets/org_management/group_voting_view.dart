@@ -71,6 +71,8 @@ enum _OrgLoadError { invalidAddress, loadFailed }
 
 class _GroupVotingViewState extends State<GroupVotingView> {
   List<VoteHistoryItem> _votes = const [];
+  /// Start of the week of history read with [_votes] (the history sheet pages back from here).
+  DateTime _historySince = DateTime.now().subtract(const Duration(days: 7));
   bool _isLoading = true;
   _OrgLoadError? _error;
 
@@ -167,8 +169,9 @@ class _GroupVotingViewState extends State<GroupVotingView> {
       // Children carousel mirrors Members (max 10 visible + the `+N` chip), so
       // a single 11-wide page is enough to feed the dense tile. The Children
       // sheet does its own paginated re-fetch when opened.
+      final historySince = DateTime.now().subtract(const Duration(days: 7));
       final results = await Future.wait([
-        PublicOSGovernance.getVotingHistory(orgAddress.eip55With0x),
+        PublicOSGovernance.getVotingHistory(orgAddress.eip55With0x, since: historySince),
         PublicOSGovernance.getOrgMembers(orgAddress),
         _loadRegisteredInboxIds(),
         PublicOSWallets.getWallets(orgAddress),
@@ -186,6 +189,7 @@ class _GroupVotingViewState extends State<GroupVotingView> {
       ]);
 
       final votes = results[0] as List<VoteHistoryItem>;
+      _historySince = historySince;
       final members = results[1] as List<EthereumAddress>;
       final inboxIds = results[2] as List<Map<String, String>>;
       final wallets = results[3] as List<Wallet>;
@@ -1368,12 +1372,15 @@ class _GroupVotingViewState extends State<GroupVotingView> {
           icon: Icons.history_rounded,
           title: context.l10n.groupVotingViewActionHistory,
           subtitle: pastVotes.isEmpty
-              ? context.l10n.groupVotingViewNoPastActions
+              ? context.l10n.historySheetNoVotesWeeks(1)
               : context.l10n.groupVotingViewPastProposals,
           trailing: _trailingNumber(tokens, '${pastVotes.length}'),
-          onTap: pastVotes.isEmpty
-              ? null
-              : () => showHistorySheet(context, history: pastVotes),
+          onTap: () => showHistorySheet(
+                context,
+                orgAddress: widget.contact!.publicosAddress!.eip55With0x,
+                history: pastVotes,
+                since: _historySince,
+              ),
         ),
         // Your ballot delegate (default lane). Member-gated.
         if (widget.isOrgMember)

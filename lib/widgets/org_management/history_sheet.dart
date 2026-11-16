@@ -4,31 +4,96 @@ import 'package:publicos_core/publicos_core.dart';
 import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 import 'package:publicos_desktop/utils/glass_sheet_dialog.dart';
+import 'package:publicos_desktop/widgets/phigital_loading_widget.dart';
 
-/// Pattern A glass-dark sheet rendering the full action history of an org.
-/// Read-only timeline; the section row tap on the main screen opens this.
+/// Pattern A glass-dark sheet rendering an org's action history, a week at a
+/// time: it opens on the week the management tab already
+/// read ([history], the closed proposals started since [since]), and "Load the
+/// week before" reads one more week, until the window reaches the org's
+/// creation. Specialised org tools may load everything at once; the apps page.
 Future<void> showHistorySheet(
   BuildContext context, {
+  required String orgAddress,
   required List<VoteHistoryItem> history,
+  required DateTime since,
 }) {
   return showGlassSheetDialog<void>(
     context: context,
     width: DialogWidth.l,
-    builder: (_) => _HistorySheet(history: history),
+    builder: (_) => _HistorySheet(orgAddress: orgAddress, history: history, since: since),
   );
 }
 
-class _HistorySheet extends StatelessWidget {
+class _HistorySheet extends StatefulWidget {
+  final String orgAddress;
   final List<VoteHistoryItem> history;
+  final DateTime since;
 
-  const _HistorySheet({required this.history});
+  const _HistorySheet({required this.orgAddress, required this.history, required this.since});
+
+  @override
+  State<_HistorySheet> createState() => _HistorySheetState();
+}
+
+class _HistorySheetState extends State<_HistorySheet> {
+  static const _week = Duration(days: 7);
+  late List<VoteHistoryItem> _items = List.of(widget.history);
+  late DateTime _since = widget.since;
+  int _weeks = 1;
+  DateTime? _createdAt;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    PublicOSGovernance.getOrgCreatedAt(widget.orgAddress).then((t) {
+      if (mounted && t != null) setState(() => _createdAt = t);
+    });
+  }
+
+  /// More to load while the window has not reached the org's creation (unknown = assume more).
+  bool get _hasOlder => _createdAt == null || _since.isAfter(_createdAt!);
+
+  Future<void> _loadWeekBefore() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    final until = _since;
+    final since = _since.subtract(_week);
+    final older = await PublicOSGovernance.getVotingHistory(widget.orgAddress, since: since, until: until);
+    if (!mounted) return;
+    setState(() {
+      final known = {for (final v in _items) v.id};
+      _items = [..._items, ...older.where((v) => !v.isActive && !known.contains(v.id))];
+      _since = since;
+      _weeks++;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = GlassTokens.of(context);
-    // Most-recent first (defensive — caller may not sort).
-    final sorted = List<VoteHistoryItem>.from(history)
+    final l10n = context.l10n;
+    final sorted = List<VoteHistoryItem>.from(_items)
       ..sort((a, b) => b.startTime.compareTo(a.startTime));
+
+    final loadMore = !_hasOlder
+        ? null
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: Center(
+              child: _loading
+                  ? const PhigitalLoadingWidget(size: 22, showShadows: false)
+                  : TextButton.icon(
+                      onPressed: _loadWeekBefore,
+                      icon: Icon(Icons.expand_more_rounded, color: tokens.connectedAccent, size: 18),
+                      label: Text(
+                        l10n.historySheetLoadWeekBefore,
+                        style: TextStyle(fontFamily: 'SpaceGrotesk', color: tokens.connectedAccent, fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+            ),
+          );
 
     return DraggableScrollableSheet(
       initialChildSize: 1.0,
@@ -47,25 +112,23 @@ class _HistorySheet extends StatelessWidget {
               const SizedBox(height: 8),
               _Header(
                 tokens: tokens,
-                title: context.l10n.historySheetTitle,
-                subtitle: context.l10n.historySheetPastActions(sorted.length),
+                title: l10n.historySheetTitle,
+                subtitle: '${l10n.historySheetPastActions(sorted.length)} · ${l10n.historySheetWindow(_weeks)}',
                 onClose: () => Navigator.pop(context),
               ),
               Expanded(
-                child: sorted.isEmpty
-                    ? _Empty(tokens: tokens)
-                    : ListView.separated(
-                        controller: scrollCtrl,
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        itemCount: sorted.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 6),
-                        itemBuilder: (_, i) => _Row(
-                          tokens: tokens,
-                          item: sorted[i],
-                        ),
-                      ),
+                child: ListView(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  children: [
+                    if (sorted.isEmpty) _Empty(tokens: tokens, weeks: _weeks),
+                    for (final item in sorted) ...[
+                      _Row(tokens: tokens, item: item),
+                      const SizedBox(height: 6),
+                    ],
+                    if (loadMore != null) loadMore,
+                  ],
+                ),
               ),
             ],
           ),
@@ -210,13 +273,14 @@ class _Row extends StatelessWidget {
 
 class _Empty extends StatelessWidget {
   final GlassTokens tokens;
-  const _Empty({required this.tokens});
+  final int weeks;
+  const _Empty({required this.tokens, required this.weeks});
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -237,7 +301,7 @@ class _Empty extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              context.l10n.historySheetEmptyTitle,
+              context.l10n.historySheetNoVotesWeeks(weeks),
               style: TextStyle(
                 fontFamily: 'SpaceGrotesk',
                 color: tokens.starkWhite,

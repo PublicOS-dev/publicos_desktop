@@ -826,7 +826,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "6c8866a7e7799784eeb6ad18a58f19180767ace6"
+      resolved-ref: "1d6c051475950d3a7890e99930c4e9589f48a402"
       url: "https://github.com/PublicOS-dev/PublicOS_Core.git"
     source: git
     version: "0.8.0"

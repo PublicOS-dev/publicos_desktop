@@ -88,7 +88,6 @@ class _EditBioSheetState extends State<EditBioSheet> {
     return Record.asProfile(
       key: widget.record?.key ?? 'profile.bio',
       value: _bioController.serialize(),
-      expiration: DateTime.now().add(const Duration(days: 365)),
       icon: Icons.person_rounded.codePoint,
       customMetadataAttributes: {
         'bioTextColor': _selectedTextColor,
@@ -104,7 +103,6 @@ class _EditBioSheetState extends State<EditBioSheet> {
     final newRecord = Record.asProfile(
       key: widget.record?.key ?? 'profile.bio',
       value: _bioController.serialize(),
-      expiration: DateTime.now().add(const Duration(days: 365)),
       customMetadataAttributes: {
         'bioTextColor': _selectedTextColor,
         'bioBorderVisible': _borderVisible,

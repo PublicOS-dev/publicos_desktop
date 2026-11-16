@@ -27,7 +27,7 @@ class CommentSection extends SliverChildBuilderDelegate {
     required void Function(Comment, String) onEdit,
     required void Function(Comment) onDelete,
     required void Function(Comment) onLoadMoreReplies,
-    required void Function(Comment, String) onReact,
+    required Future<bool?> Function(Comment, String) onReact,
     void Function(Comment)? onBlockCommenter,
     bool canModerate = false,
     String? myAddress,

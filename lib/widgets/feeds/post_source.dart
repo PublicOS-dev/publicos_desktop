@@ -117,10 +117,18 @@ abstract class PostSource extends ChangeNotifier {
   /// channel sign-in dialog) have a context to speak through.
   void attach(PostListHost host) {
     _host = host;
-    if (!_started) {
-      _started = true;
-      load();
-    }
+    start();
+  }
+
+  /// The first load, once. A host that shows the source's data before any
+  /// surface attaches (Explore's feeds tab) calls this itself, so the later
+  /// attach does not load AGAIN — that second load would notify synchronously
+  /// inside the surface's initState, i.e. during the host's build, and throw
+  /// "setState() called during build".
+  void start() {
+    if (_started) return;
+    _started = true;
+    load();
   }
 
   void detach() {

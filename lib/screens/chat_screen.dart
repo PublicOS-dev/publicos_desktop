@@ -548,7 +548,6 @@ class _SimpleChatScreenState extends State<SimpleChatScreen>
           key: key,
           value: jsonEncode(_bookmarkIds.toList()),
           // A bookmark is the user's own keepsake, so it doesn't age out.
-          expiration: DateTime.now().add(const Duration(days: 36500)),
           isExpired: false,
           isSystem: true,
         ),

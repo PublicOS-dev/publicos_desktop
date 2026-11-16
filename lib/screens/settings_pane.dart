@@ -470,7 +470,7 @@ class _SettingsPaneState extends State<SettingsPane> {
                 key: record.key,
                 value: jsonEncode(record.toJson()),
                 expiration:
-                    BigInt.from(record.expiration.millisecondsSinceEpoch),
+                    record.chainExpiration,
                 recordType: BigInt.from(record.type.index),
                 customType: record.subtype ?? '',
               ),
@@ -1273,7 +1273,6 @@ class _SettingsPaneState extends State<SettingsPane> {
           // Stored inverted: the key means "never ask".
           value: (!offer).toString(),
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 3650)),
           isExpired: false,
         ),
       );

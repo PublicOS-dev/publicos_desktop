@@ -73,3 +73,48 @@ Future<bool> openPostFromUrl(BuildContext context, String url) async {
   ));
   return true;
 }
+
+/// Open [post] in the Feeds pane's reading column, bringing Feeds up first
+/// when another pane is showing (a notification's post opens in the feed
+/// reader, not over the whole window). Feeds registers
+/// [AppNav.onOpenPost] when it mounts, so this waits a few frames for it.
+/// No context: the caller may already have closed the dialog it came from.
+/// False when Feeds never came up.
+///
+/// The post opens over ITS OWN feed (the "Go to feed" path, `onOpenFeedUrl`),
+/// so the header names its channel and ← returns to what was being read; on
+/// top of whatever was selected it would keep that header (e.g. "Latest
+/// posts"). [permalink] is the URL it was fetched from, the feed's source
+/// when the post carries no feed URL.
+Future<bool> openPostInFeeds(Post post, {String? permalink}) async {
+  final prefs = await readerPostSettings();
+  final m = RegExp(r'^(https?://[^/]+)/api/(0x[0-9a-fA-F]{40})/channels/([^/?#]+)/posts/')
+      .firstMatch((permalink ?? post.url ?? '').split('#').first);
+  final feedUrl = post.feedUrl ??
+      (m == null ? null : '${m.group(1)}/api/${m.group(2)}/channels/${m.group(3)}/json');
+  final openFeed = AppNav.onOpenFeedUrl;
+  if (feedUrl != null && openFeed != null) {
+    openFeed(feedUrl, null, m?.group(2), null);
+    // Let Feeds mount (or take the focus) and select the feed: that clears
+    // any open post, so the post goes on after it.
+    for (var i = 0; i < 30 && AppNav.onOpenPost == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 32));
+  } else if (AppNav.onOpenPost == null) {
+    AppNav.onShowFeeds?.call();
+    for (var i = 0; i < 30 && AppNav.onOpenPost == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+  }
+  final open = AppNav.onOpenPost;
+  if (open == null) return false;
+  open((onBack) => PostDetailPage(
+        post: post,
+        onBack: onBack,
+        layoutMode: prefs.layout,
+        titleTextSize: prefs.title,
+        descriptionTextSize: prefs.desc,
+      ));
+  return true;
+}

@@ -67,7 +67,6 @@ Future<void> seedDemoContactsIfNeeded({bool force = false}) async {
         key: _seededFlagKey,
         value: 'true',
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 3650)),
         isExpired: false,
       ),
     );

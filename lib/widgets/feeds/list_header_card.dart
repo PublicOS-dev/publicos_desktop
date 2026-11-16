@@ -524,12 +524,17 @@ class ListMiniStack extends StatelessWidget {
   /// ([ListMiniStackFlyIn] moves them one by one).
   final Widget Function(int index, Widget tile)? tileWrap;
 
+  /// 1 = the header's size; the add-to-lists sheet draws it smaller as a
+  /// list row's subtitle.
+  final double scale;
+
   const ListMiniStack({
     super.key,
     required this.summary,
     required this.tokens,
     required this.onTap,
     this.tileWrap,
+    this.scale = 1,
   });
 
   /// How many icons the stack draws for [summary].
@@ -551,7 +556,7 @@ class ListMiniStack extends StatelessWidget {
             MembersStack(
               tokens: tokens,
               contacts: summary.people,
-              scale: 30 / 36,
+              scale: 30 / 36 * scale,
               shrinkWrap: true,
               onTap: onTap,
             ),
@@ -560,6 +565,7 @@ class ListMiniStack extends StatelessWidget {
           if (summary.feeds.isNotEmpty)
             _FaviconStack(
               feeds: summary.feeds,
+              scale: scale,
               tileWrap: wrap == null
                   ? null
                   : (i, tile) => wrap(peopleTiles + i, tile),
@@ -570,13 +576,13 @@ class ListMiniStack extends StatelessWidget {
   }
 }
 
-/// [ListMiniStack] as the feeds header shows it: the
-/// icons come in from the right, one by one, each sliding left and settling
-/// with a small bounce; the first (leftmost) is the fastest and each next
-/// one a bit slower. Leaving, each pulls a little to the left, then shoots
-/// out to the right, in the same order. The slot's width opens at the start
-/// of the arrival and closes at the end of the leave, so the header's other
-/// items slide over.
+/// [ListMiniStack] as the feeds header shows it. Arriving (the header's one
+/// direction, see HeaderSlot): the slot's width
+/// opens, then the icons slide in a short way from the LEFT, fading in; the
+/// first (leftmost) lands fastest and each next one a bit later. Leaving:
+/// each pulls a little to the left, then
+/// shoots out to the right, fading, the rightmost fastest; then the width
+/// closes, so the header's other items slide over.
 class ListMiniStackFlyIn extends StatefulWidget {
   final bool show;
   final ListFollowSummary summary;
@@ -603,8 +609,8 @@ class _ListMiniStackFlyInState extends State<ListMiniStackFlyIn>
   static const double _firstMs = 300;
   static const double _stepMs = 70;
 
-  /// How far to the right an icon starts (and ends up when it leaves): past
-  /// the screen edge from anywhere in the stack.
+  /// How far to the right an icon ends up when it leaves: past the screen
+  /// edge from anywhere in the stack.
   static const double _travel = 180;
 
   /// The share of the run in which the slot's width opens / closes.
@@ -662,10 +668,34 @@ class _ListMiniStackFlyInState extends State<ListMiniStackFlyIn>
       final p = ((1 - _c.value) / share).clamp(0.0, 1.0);
       return _travel * Curves.easeInBack.transform(p);
     }
+    // Arriving from the LEFT, fading in, leftmost icon first. A short travel,
+    // so an icon never crosses the header's other buttons.
+    return -_arriveTravel * (1 - Curves.easeOutCubic.transform(_arriveP(i)));
+  }
+
+  /// How far to the left an icon starts when it arrives.
+  static const double _arriveTravel = 14;
+
+  /// Icon [i]'s arrival progress, 0 (away) → 1 (at rest), after the width.
+  double _arriveP(int i) {
     final share = (_firstMs + _stepMs * i) / _totalMs;
-    // easeOutBack: past the resting place to the left, then back onto it.
-    final p = (_c.value / share).clamp(0.0, 1.0);
-    return _travel * (1 - Curves.easeOutBack.transform(p));
+    // Every icon starts once the width is open; nearer ones land sooner.
+    const start = _widthShare;
+    final end = math.max(share, start + 0.1);
+    return ((_c.value - start) / (end - start)).clamp(0.0, 1.0);
+  }
+
+  /// Icon [i]'s opacity: fades in on arrival; on the way out it fades over
+  /// its own run, as it leaves to the right.
+  double _opacity(int i) {
+    if (_leaving) {
+      final n = math.max(1, ListMiniStack.iconCount(widget.summary));
+      final rank = (n - 1 - i).clamp(0, n - 1);
+      final share = (_firstMs + _stepMs * rank) / _totalMs;
+      final p = ((1 - _c.value) / share).clamp(0.0, 1.0);
+      return 1 - Curves.easeInCubic.transform(p);
+    }
+    return Curves.easeOutCubic.transform(_arriveP(i));
   }
 
   double get _widthFactor {
@@ -694,9 +724,12 @@ class _ListMiniStackFlyInState extends State<ListMiniStackFlyIn>
               summary: widget.summary,
               tokens: widget.tokens,
               onTap: widget.onTap,
-              tileWrap: (i, tile) => Transform.translate(
-                offset: Offset(_dx(i), 0),
-                child: tile,
+              tileWrap: (i, tile) => Opacity(
+                opacity: _opacity(i),
+                child: Transform.translate(
+                  offset: Offset(_dx(i), 0),
+                  child: tile,
+                ),
               ),
             ),
           ),
@@ -712,11 +745,15 @@ class _ListMiniStackFlyInState extends State<ListMiniStackFlyIn>
 class _FaviconStack extends StatelessWidget {
   final List<ListFeed> feeds;
   final Widget Function(int index, Widget tile)? tileWrap;
-  const _FaviconStack({required this.feeds, this.tileWrap});
+  final double scale;
+  const _FaviconStack({required this.feeds, this.tileWrap, this.scale = 1});
 
-  static const _size = 20.0;
-  static const _stride = 13.0;
+  static const _baseSize = 20.0;
+  static const _baseStride = 13.0;
   static const _max = 4;
+
+  double get _size => _baseSize * scale;
+  double get _stride => _baseStride * scale;
 
   @override
   Widget build(BuildContext context) {

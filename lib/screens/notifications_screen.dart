@@ -400,6 +400,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       contact: _byAddr[primary.toLowerCase()],
                       address: primary,
                       size: 34,
+                      // The avatar opens the person's profile in the Browser
+                      // and closes the notifications.
+                      onTap: () {
+                        _dismiss();
+                        AppNav.toProfile(context, primary);
+                      },
                     ),
               spans: _describe(item, tokens),
               unread: _unreadAtOpen.contains('${e.txHash}:${e.logIndex}'),
@@ -431,10 +437,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (item.kind == NotifKind.followApproved) {
       ok = await openChannelFeedFromUrl(context, url);
     } else {
-      ok = await openPostFromUrl(context, url);
+      // A post: in the Feeds reading column, the notifications closed (not
+      // over the whole window). Fetched first, so a post that can't be read
+      // still falls back to the profile below.
+      final post = await fetchPostFromUrl(url);
+      if (!mounted) return;
+      if (post != null) {
+        _dismiss();
+        await openPostInFeeds(post, permalink: url);
+        return;
+      }
+      ok = false;
     }
     if (ok || !mounted) return;
     AppNav.toProfile(context, e.actor);
+  }
+
+  /// Close the notifications when they are the bell's dialog; as a pushed
+  /// screen, pop it the same way. Leaving them for a post or a profile.
+  void _dismiss() {
+    final nav = Navigator.of(context);
+    if (nav.canPop()) nav.pop();
   }
 
   // --- copy + resolution -----------------------------------------------------
@@ -711,11 +734,19 @@ class _NotifRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    // A subtle fill under the pointer. The row's own colour hides InkWell's
+    // hover ink, so the row tracks the mouse itself.
+    return _Hover(
+      builder: (hovered) => InkWell(
       onTap: onTap,
+      mouseCursor: SystemMouseCursors.click,
       child: Container(
         decoration: BoxDecoration(
-          color: unread ? tokens.connectedAccent.withValues(alpha: 0.04) : null,
+          color: hovered
+              ? tokens.glassFillHover
+              : unread
+                  ? tokens.connectedAccent.withValues(alpha: 0.04)
+                  : null,
           border: Border(
             left: BorderSide(
               color: unread ? tokens.connectedAccent : Colors.transparent,
@@ -749,6 +780,7 @@ class _NotifRow extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -762,4 +794,24 @@ class _NotifRow extends StatelessWidget {
     if (d.inDays < 7) return '${d.inDays}d';
     return '${(d.inDays / 7).floor()}w';
   }
+}
+
+/// Rebuilds [builder] with whether the pointer is over it.
+class _Hover extends StatefulWidget {
+  final Widget Function(bool hovered) builder;
+  const _Hover({required this.builder});
+
+  @override
+  State<_Hover> createState() => _HoverState();
+}
+
+class _HoverState extends State<_Hover> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: widget.builder(_hovered),
+      );
 }

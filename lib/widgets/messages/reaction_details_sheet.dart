@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:publicos_core/publicos_core.dart';
 
+import 'package:publicos_desktop/widgets/feeds/emoji_picker_dialog.dart';
+import 'package:publicos_desktop/widgets/feeds/reaction_quick_bar.dart';
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 import 'package:publicos_desktop/widgets/shimmer_box.dart';
 import 'package:publicos_desktop/l10n/l10n_ext.dart';
@@ -61,6 +63,15 @@ class ReactionDetailsSheet extends StatefulWidget {
   /// reactions open the profile by address, and the Browser resolves it there.
   final void Function(String id)? onUnresolvedTap;
 
+  /// Optional: shows the "add a
+  /// reaction" row at the top: the reader's most-used emojis first, the
+  /// defaults filling the gaps, `+` always on the right opening the full
+  /// picker. The sheet adds the reader to the list at once and calls this;
+  /// false rolls it back. Add-only: an emoji the reader already has is
+  /// shown selected and does nothing (removal is the trash on their row).
+  /// Posts and comments pass it; XMTP message reactions do not.
+  final Future<bool> Function(String emoji)? onAddReaction;
+
   const ReactionDetailsSheet({
     super.key,
     required this.reactions,
@@ -73,6 +84,7 @@ class ReactionDetailsSheet extends StatefulWidget {
     this.load,
     this.resolveMissing,
     this.onUnresolvedTap,
+    this.onAddReaction,
   });
 
   @override
@@ -209,6 +221,60 @@ class _ReactionDetailsSheetState extends State<ReactionDetailsSheet>
   /// Emojis currently being removed (suppresses double-tap + dims the row).
   final Set<String> _removingEmojis = {};
 
+  /// The add row's emojis: history first, defaults fill (the quick bar's
+  /// list). Empty until the local read lands.
+  List<String> _addRow = const [];
+
+  /// Emojis the reader has here: [MessageReactionSummary.hasMyReaction].
+  Set<String> get _myEmojis => {
+        for (final r in _localReactions)
+          if (r.hasMyReaction) r.emoji,
+      };
+
+  /// Optimistic add: the reader joins that emoji's list (a new emoji gets
+  /// its own tab) before the server answers; false rolls it back.
+  Future<void> _handleAdd(String emoji) async {
+    final cb = widget.onAddReaction;
+    if (cb == null || _myEmojis.contains(emoji)) return;
+    recordEmojiUse(emoji);
+    final before = _localReactions;
+    final me = _currentUser;
+    setState(() {
+      final i = _localReactions.indexWhere((r) => r.emoji == emoji);
+      final next = List<MessageReactionSummary>.from(_localReactions);
+      final old = i >= 0 ? next[i] : null;
+      final added = MessageReactionSummary(
+        emoji: emoji,
+        count: (old?.count ?? 0) + 1,
+        hasMyReaction: true,
+        senderInboxIds: [
+          if (me != null) me,
+          ...?old?.senderInboxIds,
+        ],
+      );
+      if (old != null) {
+        next[i] = added;
+      } else {
+        next.add(added);
+      }
+      _localReactions = next;
+    });
+    final ok = await cb(emoji);
+    if (!mounted || ok) return;
+    setState(() => _localReactions = before);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(context.l10n.reactionDetailsSheetAddFailed),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _pickMore() async {
+    final emoji = await showEmojiPickerDialog(context);
+    if (emoji != null && mounted) _handleAdd(emoji);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -218,6 +284,11 @@ class _ReactionDetailsSheetState extends State<ReactionDetailsSheet>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
+    if (widget.onAddReaction != null) {
+      ReactionQuickBar.emojis(ReactionQuickBar.heartSlots).then((e) {
+        if (mounted) setState(() => _addRow = e);
+      });
+    }
     final load = widget.load;
     if (load != null) {
       _loading = true;
@@ -379,6 +450,13 @@ class _ReactionDetailsSheetState extends State<ReactionDetailsSheet>
       mainAxisSize: MainAxisSize.min,
       children: [
         _Header(title: context.l10n.reactionDetailsSheetTitle),
+        if (widget.onAddReaction != null)
+          _AddRow(
+            emojis: _addRow,
+            mine: _myEmojis,
+            onPick: _handleAdd,
+            onMore: _pickMore,
+          ),
         _EmojiTabs(
           reactions: _localReactions,
           selected: _selectedEmoji,
@@ -480,6 +558,70 @@ class _Header extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The "add a reaction" row: [emojis] (history, then defaults), then `+` on
+/// the right for the full picker. An emoji in [mine] shows selected (the
+/// tabs' selected style) and does nothing.
+class _AddRow extends StatelessWidget {
+  final List<String> emojis;
+  final Set<String> mine;
+  final ValueChanged<String> onPick;
+  final VoidCallback onMore;
+
+  const _AddRow({
+    required this.emojis,
+    required this.mine,
+    required this.onPick,
+    required this.onMore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    Widget cell({required Widget child, required bool selected, VoidCallback? onTap}) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Material(
+          color: selected ? tokens.surfaceElevated : Colors.transparent,
+          shape: CircleBorder(
+            side: BorderSide(
+              color: selected ? tokens.borderMedium : tokens.borderSubtle,
+              width: 1,
+            ),
+          ),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(width: 44, height: 44, child: Center(child: child)),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 8, 6),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            for (final e in emojis)
+              cell(
+                selected: mine.contains(e),
+                onTap: mine.contains(e) ? null : () => onPick(e),
+                child: Text(e, style: const TextStyle(fontSize: 22)),
+              ),
+            const Spacer(),
+            cell(
+              selected: false,
+              onTap: onMore,
+              child: Icon(Icons.add_rounded, size: 22, color: tokens.textDim),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -106,7 +106,6 @@ class _ConversationSettingsSheetState extends State<ConversationSettingsSheet>
     final record = Record.asSettings(
       key: key,
       value: chars.toString(),
-      expiration: DateTime.now().add(const Duration(days: 365)),
       isExpired: false,
       isSystem: true,
     );

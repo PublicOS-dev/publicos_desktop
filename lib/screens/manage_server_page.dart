@@ -245,11 +245,10 @@ class _ManageServerPageState extends State<ManageServerPage> {
     try {
       final url = _channelJsonUrl(channel);
       final record = Record.asRouter(
-        key: 'rss.${channel.slug}',
+        key: Record.channelTabKey(channel.slug),
         routerSubtype: RouterSubtype.channel,
         value: url,
         name: channel.name,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       final ok = await PublicOSContacts.setRecord(record);
       if (ok && mounted) await _loadExistingTabUrls();

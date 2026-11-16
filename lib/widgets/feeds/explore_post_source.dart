@@ -18,7 +18,19 @@ import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 import 'package:publicos_desktop/widgets/media_aspect_cache.dart';
 
+/// How long a fetched Explore list is reused by a fresh view, so coming back
+/// from a post's feed does not reload the list. A pull still fetches.
+const exploreCacheFor = Duration(minutes: 5);
+
 class ExplorePostSource extends PostSource {
+  /// Per window (`''` = the server's suggested one), for the app session.
+  static final Map<String,
+          ({
+            TrendingList<TrendingPost>? posts,
+            TrendingList<TrendingChannel>? channels,
+            DateTime at,
+          })> _cache = {};
+
   /// null until the first answer: the server picks its suggested window, and
   /// the chips then show what it picked.
   String? _cut;
@@ -48,19 +60,32 @@ class ExplorePostSource extends PostSource {
   /// First load and a cut change show the loader; a pull-to-refresh with
   /// lists already on screen reloads QUIETLY behind them (there is no cache
   /// to paint, so blanking the list would be the whole screen flashing).
+  /// A view opening empty reuses a list fetched less than [exploreCacheFor]
+  /// ago; a pull (lists on screen) always fetches.
   @override
-  Future<void> load() => _load(quiet: _posts != null || _channels != null);
+  Future<void> load() {
+    final onScreen = _posts != null || _channels != null;
+    return _load(quiet: onScreen, allowCache: !onScreen);
+  }
 
   /// A window change: both lists reload together, loud.
   void selectCut(String cut) {
     if (cut == _cut) return;
     _cut = cut;
-    _load(quiet: false);
+    _load(quiet: false, allowCache: true);
   }
 
-  Future<void> _load({required bool quiet}) async {
+  Future<void> _load({required bool quiet, bool allowCache = false}) async {
     if (isDisposed) return;
     final gen = ++_loadGeneration;
+    final asked = _cut ?? '';
+    final hit = _cache[asked];
+    if (allowCache &&
+        hit != null &&
+        DateTime.now().difference(hit.at) < exploreCacheFor) {
+      _apply(hit.posts, hit.channels);
+      return;
+    }
     if (quiet) {
       _refreshing = true;
     } else {
@@ -74,6 +99,15 @@ class ExplorePostSource extends PostSource {
     if (isDisposed || gen != _loadGeneration) return;
     final posts = results[0] as TrendingList<TrendingPost>?;
     final channels = results[1] as TrendingList<TrendingChannel>?;
+    final entry = (posts: posts, channels: channels, at: DateTime.now());
+    _cache[asked] = entry;
+    final cut = posts?.cut ?? channels?.cut;
+    if (cut != null) _cache[cut] = entry;
+    _apply(posts, channels);
+  }
+
+  void _apply(TrendingList<TrendingPost>? posts,
+      TrendingList<TrendingChannel>? channels) {
     _posts = posts;
     _channels = channels;
     _cut ??= posts?.cut ?? channels?.cut;

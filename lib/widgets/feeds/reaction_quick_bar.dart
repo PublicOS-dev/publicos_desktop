@@ -46,7 +46,6 @@ class ReactionPrefs {
           key: kDoubleTapKey,
           value: emoji,
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 365)),
         ),
       );
     } catch (_) {}

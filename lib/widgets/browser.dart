@@ -1296,7 +1296,6 @@ class _BrowserState extends State<Browser>
             key: settingKey,
             value: 'true',
             isSystem: true,
-            expiration: DateTime.now().add(const Duration(days: 365)),
           ),
         );
       } catch (_) {}
@@ -3026,7 +3025,7 @@ class _BrowserState extends State<Browser>
             contact.publicosAddress!,
             key: record.key,
             value: jsonEncode(record.toChainValue()),
-            expiration: BigInt.from(record.expiration.millisecondsSinceEpoch),
+            expiration: record.chainExpiration,
             recordType: BigInt.from(record.type.index),
             customType: record.subtype ?? '',
           );
@@ -3058,7 +3057,6 @@ class _BrowserState extends State<Browser>
         key: 'profile.avatar.nft',
         value: ref.encode(),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       final ok = await PublicOSContacts.setRecord(record);
       if (ok) {
@@ -3125,7 +3123,6 @@ class _BrowserState extends State<Browser>
           key: _kProfileBackgroundKey,
           value: imageUrl,
           icon: Icons.hide_image_outlined.codePoint,
-          expiration: DateTime.now().add(const Duration(days: 365 * 5)),
         );
         if (_isSelf) {
           success = await PublicOSContacts.setRecord(backgroundRecord);
@@ -3135,7 +3132,7 @@ class _BrowserState extends State<Browser>
             key: backgroundRecord.key,
             value: jsonEncode(backgroundRecord.toChainValue()),
             expiration:
-                BigInt.from(backgroundRecord.expiration.millisecondsSinceEpoch),
+                backgroundRecord.chainExpiration,
             recordType: BigInt.from(backgroundRecord.type.index),
             customType: backgroundRecord.subtype ?? '',
           );

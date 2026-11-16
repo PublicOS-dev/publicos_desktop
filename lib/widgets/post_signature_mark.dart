@@ -493,7 +493,6 @@ class SignatureShimmerPrefs {
           key: kEnabledKey,
           value: value ? 'true' : 'false',
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 365)),
         ),
       );
     } catch (_) {}
@@ -523,7 +522,6 @@ class SignatureShimmerPrefs {
           key: kSecondsKey,
           value: '$v',
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 365)),
         ),
       );
     } catch (_) {}

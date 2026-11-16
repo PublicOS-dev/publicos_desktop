@@ -1,6 +1,9 @@
 import 'dart:math';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
+
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:flutter/material.dart';
 import 'package:publicos_desktop/widgets/key_lifetime_line.dart';
@@ -681,6 +684,68 @@ class _KeychainDialogState extends State<_KeychainDialog>
     }
   }
 
+  /// "Add to another inbox": the key as a `publicos://link_key/` QR for a
+  /// phone to scan (the client's `keychain_sheet._showKeyQr` +
+  /// `secret_dialogs.showKeyQrDialog`, re-shelled as ONE dialog: the warning
+  /// first, the QR only after "I understand"). No screenshot block here:
+  /// Windows has no equivalent of the phones' FLAG_SECURE, so the warnings
+  /// carry it. The bytes are zeroed when the dialog closes.
+  Future<void> _showKeyQr(String label) async {
+    final addr = _userAddress;
+    if (addr == null) {
+      _snack(context.l10n.bspScreenNoActiveAccount);
+      return;
+    }
+    try {
+      final hex = await PublicOSKeychain.exportPrivateKey(addr, label);
+      if (hex == null) {
+        _snack(context.l10n.keychainPrivKeyNotFound);
+        return;
+      }
+      if (!mounted) return;
+      final bytes = PublicOSKeychain.hexToBytes(hex);
+      final link =
+          'publicos://link_key/${base64Url.encode(bytes).replaceAll('=', '')}';
+      try {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => _KeyQrDialog(link: link, keyLabel: label),
+        );
+      } finally {
+        bytes.fillRange(0, bytes.length, 0);
+      }
+    } catch (e) {
+      _snack(localizedError(context.l10n, e));
+    }
+  }
+
+  bool _refreshingKeys = false;
+
+  Future<void> _refreshKeys() async {
+    final addr = _userAddress;
+    if (_refreshingKeys || addr == null) return;
+    setState(() => _refreshingKeys = true);
+    try {
+      final moved = await PublicOSKeychain.refreshInboxStamps(addr);
+      final active = PublicOS.currentXmtpKeyLabel;
+      if (active != null && moved.contains(active) && mounted) {
+        // The running client still talks to the key's OLD inbox: reload it
+        // through the activation gate.
+        await _activateKeyForXmtp(context, addr, active);
+      }
+      await _fetchKeys();
+      widget.onKeysChanged?.call();
+      if (!mounted) return;
+      _snack(moved.isEmpty
+          ? context.l10n.keychainRefreshDone
+          : context.l10n.keychainRefreshMoved(moved.join(', ')));
+    } catch (e) {
+      if (mounted) _snack(localizedError(context.l10n, e));
+    } finally {
+      if (mounted) setState(() => _refreshingKeys = false);
+    }
+  }
+
   void _exportSessionKey() {
     final pk = PublicOS.currentBlockchainPrivateKey;
     if (pk == null) {
@@ -1251,6 +1316,21 @@ class _KeychainDialogState extends State<_KeychainDialog>
             ),
           ),
           const Spacer(),
+          // Refresh: re-reads every key's inbox from
+          // the network so a key moved to another inbox (the QR handoff)
+          // stops naming its old one; reloads the active key if it moved.
+          IconButton(
+            tooltip: context.l10n.keychainRefresh,
+            onPressed: _refreshingKeys ? null : _refreshKeys,
+            icon: _refreshingKeys
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: PixelRainLoadingWidget(size: 18),
+                  )
+                : Icon(Icons.refresh_rounded,
+                    size: 19, color: tokens.starkWhite),
+          ),
           IconButton(
             tooltip: context.l10n.createRecordPageClose,
             icon: Icon(Icons.close_rounded, size: 19, color: tokens.textDim),
@@ -1942,6 +2022,15 @@ class _KeychainDialogState extends State<_KeychainDialog>
             onTap: () => _exportKey(label),
             tokens: tokens,
           ),
+          // The QR key handoff, SHOWING side only: desktop shows the QR, it
+          // does not read one; the phone scans it.
+          _KeychainActionRow(
+            icon: Icons.qr_code_2_rounded,
+            label: context.l10n.keychainActionAddToInbox,
+            subtitle: context.l10n.keychainActionAddToInboxSub,
+            onTap: () => _showKeyQr(label),
+            tokens: tokens,
+          ),
           _KeychainActionRow(
             icon: Icons.delete_outline_rounded,
             label: context.l10n.keychainActionDelete,
@@ -1952,6 +2041,143 @@ class _KeychainDialogState extends State<_KeychainDialog>
             tokens: tokens,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The key QR for "Add to another inbox": warning step, then the QR.
+class _KeyQrDialog extends StatefulWidget {
+  final String link;
+  final String keyLabel;
+  const _KeyQrDialog({required this.link, required this.keyLabel});
+
+  @override
+  State<_KeyQrDialog> createState() => _KeyQrDialogState();
+}
+
+class _KeyQrDialogState extends State<_KeyQrDialog> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final l10n = context.l10n;
+    final title = _revealed
+        ? l10n.keyQrTitle(widget.keyLabel.toUpperCase())
+        : l10n.keyQrWarningTitle;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: Container(
+            width: DialogWidth.s,
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            decoration: GlassTheme.glassBox(context).copyWith(
+              color: tokens.surfaceDeep.withValues(alpha: 0.92),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: tokens.fallbackAccent, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                          color: tokens.fallbackAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (!_revealed) ...[
+                  Text(
+                    l10n.keyQrWarningBody,
+                    style: TextStyle(
+                        color: tokens.textDim, fontSize: 13, height: 1.5),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(l10n.actionCancel,
+                            style: TextStyle(color: tokens.textDim)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: tokens.fallbackAccent,
+                          foregroundColor: tokens.background,
+                        ),
+                        onPressed: () => setState(() => _revealed = true),
+                        child: Text(l10n.secretDialogsIUnderstand,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  Text(
+                    l10n.keyQrNeverShare,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: tokens.fallbackAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: QrImageView(
+                      data: widget.link,
+                      version: QrVersions.auto,
+                      size: 240,
+                      backgroundColor: Colors.transparent,
+                      eyeStyle: QrEyeStyle(
+                        eyeShape: QrEyeShape.circle,
+                        color: tokens.starkWhite,
+                      ),
+                      dataModuleStyle: QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.circle,
+                        color: tokens.starkWhite,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.keyQrInstructions,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: tokens.textDim, fontSize: 12, height: 1.5),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: tokens.starkWhite,
+                      foregroundColor: tokens.background,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.secretDialogsDone,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2270,7 +2496,6 @@ Future<void> _maybeOfferInboxRegistration(
           key: kInboxPromptOffKey,
           value: 'true',
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 3650)),
           isExpired: false,
         ),
       );

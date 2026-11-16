@@ -4142,10 +4142,22 @@ abstract class AppLocalizations {
   /// **'This inbox is registered on your account but no private key for it lives on this device, so we can\'t load identities or installations. Import the key from another device (keychain or mnemonic) to manage it here.'**
   String get inboxIdsNoLocalKeyBody;
 
+  /// No description provided for @inboxIdsNotSetUpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set up on this device'**
+  String get inboxIdsNotSetUpTitle;
+
+  /// No description provided for @inboxIdsNotSetUpBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This key is on this device, but it isn\'t set up for messages here, so its inbox can\'t be shown. Select the key in the keychain to set it up.'**
+  String get inboxIdsNotSetUpBody;
+
   /// No description provided for @inboxIdsLinkedAccounts.
   ///
   /// In en, this message translates to:
-  /// **'Linked accounts'**
+  /// **'Linked keys'**
   String get inboxIdsLinkedAccounts;
 
   /// No description provided for @inboxIdsInstallations.
@@ -4535,13 +4547,13 @@ abstract class AppLocalizations {
   /// No description provided for @inboxIdsAddAccountTitle.
   ///
   /// In en, this message translates to:
-  /// **'ADD ACCOUNT'**
+  /// **'ADD KEY'**
   String get inboxIdsAddAccountTitle;
 
   /// No description provided for @inboxIdsAddAccountSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Link an additional wallet to this inbox.'**
+  /// **'Link another key to this inbox.'**
   String get inboxIdsAddAccountSubtitle;
 
   /// No description provided for @inboxIdsMethodImportKeyTitle.
@@ -4555,6 +4567,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import from mnemonic or private key'**
   String get inboxIdsMethodImportKeySubtitle;
+
+  /// No description provided for @inboxIdsMethodQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'QR from another phone'**
+  String get inboxIdsMethodQrTitle;
+
+  /// No description provided for @inboxIdsMethodQrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On the phone that holds the key: Keychain, open the key, Add to another inbox. Then scan its QR with this phone\'s camera.'**
+  String get inboxIdsMethodQrSubtitle;
+
+  /// No description provided for @linkKeyPickInboxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD {address} TO WHICH INBOX?'**
+  String linkKeyPickInboxTitle(String address);
+
+  /// No description provided for @linkKeyNoInboxes.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone has no inbox to add the key to.'**
+  String get linkKeyNoInboxes;
+
+  /// No description provided for @linkKeyConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD KEY'**
+  String get linkKeyConfirmTitle;
+
+  /// No description provided for @linkKeyConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to add {address} to inbox {inbox}?'**
+  String linkKeyConfirmBody(String address, String inbox);
+
+  /// No description provided for @linkKeyAddedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'KEY ADDED'**
+  String get linkKeyAddedTitle;
+
+  /// No description provided for @linkKeyAddedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{address} is now part of inbox {inbox}. This phone did not keep the key.\n\nOn the phone that showed the QR, open the keychain and tap Refresh.'**
+  String linkKeyAddedBody(String address, String inbox);
+
+  /// No description provided for @linkKeyInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This QR does not carry a valid key.'**
+  String get linkKeyInvalid;
+
+  /// No description provided for @linkKeyAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get linkKeyAdd;
+
+  /// No description provided for @keychainActionAddToInbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to another inbox'**
+  String get keychainActionAddToInbox;
+
+  /// No description provided for @keychainActionAddToInboxSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Show this key as a QR, to scan with your other phone and add it to an inbox there.'**
+  String get keychainActionAddToInboxSub;
+
+  /// No description provided for @keyQrWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'THIS QR IS YOUR KEY'**
+  String get keyQrWarningTitle;
+
+  /// No description provided for @keyQrWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR carries this key itself. Anyone who scans it, or sees a photo of it, gets your key.\n\nDo not let anyone else see it. Do not take a photo or a screenshot of it, and do not share it. Scan it only with your own phone.\n\nIf this key is linked to another inbox, adding it to a new one moves it: the old inbox loses this key and the conversations it reached through it.'**
+  String get keyQrWarningBody;
+
+  /// No description provided for @keyQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD {label} TO ANOTHER INBOX'**
+  String keyQrTitle(String label);
+
+  /// No description provided for @keyQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan this with your other phone\'s camera. PublicOS opens there and asks which inbox to add the key to. Then tap Refresh in this keychain.'**
+  String get keyQrInstructions;
+
+  /// No description provided for @keyQrNeverShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Never let anyone else see this QR.'**
+  String get keyQrNeverShare;
+
+  /// No description provided for @keychainRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh keys'**
+  String get keychainRefresh;
+
+  /// No description provided for @keychainRefreshDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Keys refreshed'**
+  String get keychainRefreshDone;
+
+  /// No description provided for @keychainRefreshMoved.
+  ///
+  /// In en, this message translates to:
+  /// **'{labels} moved to another inbox'**
+  String keychainRefreshMoved(String labels);
 
   /// No description provided for @inboxIdsImportKeyTitle.
   ///
@@ -4589,7 +4721,7 @@ abstract class AppLocalizations {
   /// No description provided for @inboxIdsActionAddAccount.
   ///
   /// In en, this message translates to:
-  /// **'Add account'**
+  /// **'Add key'**
   String get inboxIdsActionAddAccount;
 
   /// No description provided for @inboxIdsActionSyncing.
@@ -4805,13 +4937,13 @@ abstract class AppLocalizations {
   /// No description provided for @inboxIdsAccountAdded.
   ///
   /// In en, this message translates to:
-  /// **'Account added'**
+  /// **'Key added'**
   String get inboxIdsAccountAdded;
 
   /// No description provided for @inboxIdsAccountAddFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to add account'**
+  /// **'Failed to add key'**
   String get inboxIdsAccountAddFailed;
 
   /// No description provided for @inboxIdsErrorInvalidKeyFormat.
@@ -5419,6 +5551,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ACCEPT AND CONTINUE'**
   String get protocolAgreementAccept;
+
+  /// No description provided for @protocolAgreementAgeCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'I am 16 or older, and old enough where I live to accept this on my own.'**
+  String get protocolAgreementAgeCheck;
 
   /// No description provided for @protocolAgreementLoadFailed.
   ///
@@ -10893,6 +11031,12 @@ abstract class AppLocalizations {
   /// **'Failed to remove reaction'**
   String get reactionDetailsSheetRemoveFailed;
 
+  /// No description provided for @reactionDetailsSheetAddFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to add reaction'**
+  String get reactionDetailsSheetAddFailed;
+
   /// No description provided for @reactionDetailsSheetNoReactions.
   ///
   /// In en, this message translates to:
@@ -12303,6 +12447,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Past proposals will appear here once any are executed, cancelled, or expired.'**
   String get historySheetEmptyBody;
+
+  /// No description provided for @historySheetNoVotesWeeks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{No votes this last week} other{No votes in the last {count} weeks}}'**
+  String historySheetNoVotesWeeks(int count);
+
+  /// No description provided for @historySheetWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{last week} other{last {count} weeks}}'**
+  String historySheetWindow(int count);
+
+  /// No description provided for @historySheetLoadWeekBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load the week before'**
+  String get historySheetLoadWeekBefore;
 
   /// No description provided for @membersSheetRemoveTitle.
   ///
@@ -25578,6 +25740,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Every 10 minutes the servers on the network agree on what is being read most. Pull down to check again.'**
   String get exploreEmptySubtitle;
+
+  /// No description provided for @feedsNavigationDrawerSectionExplore.
+  ///
+  /// In en, this message translates to:
+  /// **'EXPLORE'**
+  String get feedsNavigationDrawerSectionExplore;
+
+  /// No description provided for @exploreHotPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot posts'**
+  String get exploreHotPosts;
+
+  /// No description provided for @exploreHotFeeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot feeds'**
+  String get exploreHotFeeds;
+
+  /// No description provided for @exploreLatestPosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest posts'**
+  String get exploreLatestPosts;
+
+  /// No description provided for @exploreLatestEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing new yet'**
+  String get exploreLatestEmptyTitle;
+
+  /// No description provided for @exploreLatestEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The newest public posts from across the network show here, refreshed every 10 minutes. Pull down to check again.'**
+  String get exploreLatestEmptySubtitle;
 
   /// Title of the dialog shown before opening a profile whose owner marked it as mature content.
   ///

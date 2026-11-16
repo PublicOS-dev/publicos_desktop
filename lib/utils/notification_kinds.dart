@@ -454,7 +454,6 @@ Future<void> setNotifKindEnabled(NotifKind k, bool enabled) async {
       value: enabled.toString(),
       isSystem: true,
       isExpired: false,
-      expiration: DateTime.now().add(const Duration(days: 3650)),
     );
     await PublicOSSettings.setSetting(notifPrefKey(k), rec);
   } catch (_) {

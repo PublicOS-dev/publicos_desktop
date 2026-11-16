@@ -300,6 +300,10 @@ class _AppShellState extends State<AppShell> {
       if (!mounted) return;
       _showDestination(index);
     };
+    AppNav.onShowFeeds = () {
+      if (!mounted) return;
+      _showDestination(_feedsIndex);
+    };
 
     // Self-profile changes (avatar / name / records) repaint the user card.
     // This is a domain-event stream carrying the Contact, not a "please reload"
@@ -841,7 +845,6 @@ class _AppShellState extends State<AppShell> {
           key: flag,
           value: 'true',
           isSystem: true,
-          expiration: DateTime.now().add(const Duration(days: 3650)),
           isExpired: false,
         ),
       );

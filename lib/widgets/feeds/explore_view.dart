@@ -3,9 +3,11 @@
 // What the whole network is reading. The fetch lives in ExplorePostSource
 // and the posts tab is the shared
 // PostSurface → PostListView, so trending posts scroll, snap and play like
-// every other post list. This view keeps what is Explore's own: the Posts |
-// Feeds toggle, the window chips, and the feeds tab's channel rows (rows, not
-// posts — they never go through the renderer).
+// every other post list. This view keeps what is Explore's own: the window
+// chips and the feeds' channel rows (rows, not posts: they never go through
+// the renderer). It renders one ExploreMode, picked in the
+// drawer's EXPLORE section; Latest posts reads LatestPostSource and has no
+// chips.
 //
 // Reading this list records nothing. A tap goes to the item's own server, the
 // same as anywhere else in the app: a post opens its detail page (comments,
@@ -17,6 +19,7 @@ import 'package:flutter/services.dart';
 import 'package:publicos_core/publicos_core.dart';
 import 'package:publicos_desktop/widgets/explorer_chip.dart';
 import 'package:publicos_desktop/widgets/feeds/explore_post_source.dart';
+import 'package:publicos_desktop/widgets/feeds/latest_post_source.dart';
 import 'package:publicos_desktop/widgets/feeds/feed_favicon.dart';
 import 'package:publicos_desktop/widgets/feeds/post_card.dart'
     show PostLayoutMode;
@@ -27,9 +30,12 @@ import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/router_helpers.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 
-enum _ExploreTab { posts, feeds }
+/// One Explore row of the drawer's EXPLORE section: the rows are the choice,
+/// and the window chips sit inside the two Hot rows.
+enum ExploreMode { hotPosts, hotFeeds, latest }
 
 class ExploreView extends StatefulWidget {
+  final ExploreMode mode;
   final Color? color;
 
   /// Settings overrides — same contract as PostsList / BookmarksView: when
@@ -51,6 +57,7 @@ class ExploreView extends StatefulWidget {
   final int refreshTick;
   const ExploreView({
     super.key,
+    required this.mode,
     this.color,
     this.titleTextSize,
     this.descriptionTextSize,
@@ -67,18 +74,30 @@ class ExploreView extends StatefulWidget {
 }
 
 class _ExploreViewState extends State<ExploreView> {
-  final ExplorePostSource _source = ExplorePostSource();
-  _ExploreTab _tab = _ExploreTab.posts;
+  /// Hot posts / Hot feeds: the trending lists (both load together, the
+  /// window chips switch them). Latest: the network's newest posts, no chips.
+  late final PostSource _source = widget.mode == ExploreMode.latest
+      ? LatestPostSource()
+      : ExplorePostSource();
+
+  ExplorePostSource? get _hot {
+    final s = _source;
+    return s is ExplorePostSource ? s : null;
+  }
 
   bool get _isLoading => _source.state is PostsLoading;
 
   @override
   void initState() {
     super.initState();
+    // Start the first load here so the feeds tab never waits on a surface.
+    // start(), never load(): it marks the source started, so the surface's
+    // attach on the posts tab does not load a second time mid-build.
+    _source.start();
+    // Listen AFTER start(): a list served from the 5-min cache is ready
+    // synchronously inside start(), and its notify would be a setState
+    // inside initState. The first build reads the state directly.
     _source.addListener(_onSourceChanged);
-    // The surface starts the first load on attach; on the posts tab that is
-    // the first build. Start it here so the feeds tab never waits on it.
-    _source.load();
     _reportLoading();
   }
 
@@ -100,7 +119,10 @@ class _ExploreViewState extends State<ExploreView> {
     _reportLoading();
   }
 
-  bool _lastReportedLoading = false;
+  /// Null until the first report, which always goes up: the host raises its
+  /// spinner on every row change, and a list served from the 5-min cache is
+  /// never "loading", so a change-only report would leave it up forever.
+  bool? _lastReportedLoading;
   void _reportLoading() {
     final cb = widget.onLoadingChanged;
     if (cb == null) return;
@@ -113,9 +135,10 @@ class _ExploreViewState extends State<ExploreView> {
   }
 
   void _selectCut(String cut) {
-    if (cut == _source.cut) return;
+    final hot = _hot;
+    if (hot == null || cut == hot.cut) return;
     HapticFeedback.selectionClick();
-    _source.selectCut(cut);
+    hot.selectCut(cut);
   }
 
   // -- Build -------------------------------------------------------------------
@@ -126,9 +149,9 @@ class _ExploreViewState extends State<ExploreView> {
     final tokens = GlassTokens.of(context);
     return Column(
       children: [
-        _buildControls(tokens),
+        if (_hot != null) _buildControls(tokens),
         Expanded(
-          child: _tab == _ExploreTab.posts
+          child: widget.mode != ExploreMode.hotFeeds
               ? PostSurface(
                   source: _source,
                   color: widget.color,
@@ -153,25 +176,12 @@ class _ExploreViewState extends State<ExploreView> {
       TrendingCut.h12: l10n.exploreWindow12h,
       TrendingCut.h24: l10n.exploreWindow24h,
     };
-    final cut = _source.cut;
+    final cut = _hot?.cut;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _TabToggle(
-            current: _tab,
-            postsLabel: l10n.exploreTabPosts,
-            feedsLabel: l10n.exploreTabFeeds,
-            onChanged: (t) {
-              if (t == _tab) return;
-              HapticFeedback.selectionClick();
-              setState(() => _tab = t);
-            },
-            ),
-          ),
           // The explorer chips every other view uses.
           ExplorerChipBar(
             children: [
@@ -197,7 +207,7 @@ class _ExploreViewState extends State<ExploreView> {
           ? const Center(child: PhigitalLoadingWidget())
           : const SizedBox.shrink();
     }
-    final items = _source.channels?.items ?? const <TrendingChannel>[];
+    final items = _hot?.channels?.items ?? const <TrendingChannel>[];
     if (items.isEmpty) return _buildEmpty(theme, tokens);
     return RefreshIndicator(
       onRefresh: _source.load,
@@ -247,93 +257,6 @@ class _ExploreViewState extends State<ExploreView> {
   }
 }
 
-/// Posts | Feeds — two labels over a hairline, with a white underline that
-/// slides under the selected one (a filled segment is hard to tell apart).
-class _TabToggle extends StatelessWidget {
-  final _ExploreTab current;
-  final String postsLabel;
-  final String feedsLabel;
-  final ValueChanged<_ExploreTab> onChanged;
-
-  const _TabToggle({
-    required this.current,
-    required this.postsLabel,
-    required this.feedsLabel,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = GlassTokens.of(context);
-    Widget label(_ExploreTab tab, String text) {
-      final active = tab == current;
-      return Expanded(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => onChanged(tab),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                color: active ? tokens.starkWhite : tokens.textDim,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-              child: Text(text, textAlign: TextAlign.center),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Container(height: 1, color: tokens.borderSubtle),
-        ),
-        Row(
-          children: [
-            label(_ExploreTab.posts, postsLabel),
-            label(_ExploreTab.feeds, feedsLabel),
-          ],
-        ),
-        Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedAlign(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              alignment: current == _ExploreTab.posts
-                  ? Alignment.bottomLeft
-                  : Alignment.bottomRight,
-              child: FractionallySizedBox(
-                widthFactor: 0.5,
-                child: Center(
-                  heightFactor: 1,
-                  child: Container(
-                    width: 48,
-                    height: 2,
-                    decoration: BoxDecoration(
-                      color: tokens.starkWhite,
-                      borderRadius: BorderRadius.circular(1),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// One trending channel: favicon, name, description, readers. A click opens
-/// the feed on the channel's own server, where the read counts.
 class _ChannelRow extends StatelessWidget {
   final int rank;
   final TrendingChannel item;

@@ -4,7 +4,9 @@ import 'package:publicos_core/publicos_core.dart';
 import 'package:zero_mentions/zero_mentions.dart';
 
 import 'package:publicos_desktop/router_helpers.dart';
+import 'package:publicos_desktop/widgets/messages/reaction_details_sheet.dart';
 import 'package:publicos_desktop/widgets/feeds/emoji_picker_dialog.dart';
+import 'package:publicos_desktop/widgets/feeds/reaction_button.dart';
 import 'package:publicos_desktop/widgets/feeds/reaction_quick_bar.dart';
 import 'package:publicos_desktop/widgets/feeds/mention_text.dart';
 import 'package:publicos_desktop/widgets/feeds/translation_service.dart';
@@ -32,7 +34,8 @@ class CommentCard extends StatefulWidget {
   final void Function(Comment, String) onEdit;
   final void Function(Comment) onDelete;
   final void Function(Comment) onLoadMoreReplies;
-  final void Function(Comment, String) onReact;
+  /// The server toggle: true = added, false = removed, null = failed.
+  final Future<bool?> Function(Comment, String) onReact;
 
   /// Optional. When set, surfaces moderation items in the comment's 3-dot
   /// menu for users who are post author OR channel owner but not the
@@ -83,10 +86,13 @@ class _CommentCardState extends State<CommentCard> {
   Contact? _authorContact;
   bool _showReplies = true;
 
-  /// The reaction group, tapped open into its single chips.
-  /// Comments have no who-reacted sheet, and a chip is how you take your
-  /// own reaction back, so the group expands instead.
-  bool _reactionsOpen = false;
+  /// This session's reaction changes laid over the comment's counts until
+  /// the parent hands a new comment back: emoji -> added (true) / removed
+  /// (false). Comments are optimistic.
+  final Map<String, bool> _optimistic = {};
+
+  /// Bumped on every add: [ReactionButton] jellies on it.
+  int _reactPulse = 0;
   bool _editing = false;
   // Mention-aware: stored @[0xAddr] tokens rehydrate to styled @displayname
   // (names come from the shared per-page resolver's cache — warm by the time
@@ -153,6 +159,12 @@ class _CommentCardState extends State<CommentCard> {
   void didUpdateWidget(covariant CommentCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.comment, widget.comment)) _verification = null;
+    // The server spoke (the parent's new comment carries the counts): the
+    // optimistic layer is settled, keeping it would count twice.
+    if (oldWidget.comment.uid != widget.comment.uid ||
+        !identical(oldWidget.comment.reactions, widget.comment.reactions)) {
+      _optimistic.clear();
+    }
     // A card can be handed a different comment (a new one landing above it):
     // never keep the previous comment's author, or one account's comment
     // shows as another account's.
@@ -445,23 +457,164 @@ class _CommentCardState extends State<CommentCard> {
     if (ok == true) widget.onDelete(widget.comment);
   }
 
-  Future<void> _showEmojiPicker() async {
-    final emoji = await showEmojiPickerDialog(context);
-    if (emoji != null) widget.onReact(widget.comment, emoji);
+  // ---- Reactions: one button + the sheet ----------------------------------
+
+  /// The comment's counts plus this session's changes, most popular first.
+  List<(String, int)> _displayedReactions() {
+    final m = <String, int>{
+      for (final r in widget.comment.reactions) r.emoji: r.count,
+    };
+    _optimistic.forEach((e, added) {
+      final n = (m[e] ?? 0) + (added ? 1 : -1);
+      if (n > 0) {
+        m[e] = n;
+      } else {
+        m.remove(e);
+      }
+    });
+    final out = [for (final e in m.entries) (e.key, e.value)];
+    out.sort((a, b) => b.$2.compareTo(a.$2));
+    return out;
   }
 
-  /// The heart opens the quick bar anchored to the heart's own context;
-  /// `+` is the full picker. ADD-only: the section's `onReact` is a toggle,
-  /// so an emoji this reader already has on the comment is left alone.
-  void _showQuickBar(BuildContext heartCtx) {
-    ReactionQuickBar.show(
-      heartCtx,
-      onPick: (emoji) {
-        if (widget.comment.userReactionEmojis.contains(emoji)) return;
-        widget.onReact(widget.comment, emoji);
-      },
-      onMore: _showEmojiPicker,
+  /// The post author's reaction badge: the server's word, except when the
+  /// reader IS the post's author, whose own reactions show at once (their
+  /// first emoji), optimistic like the button.
+  CommentAuthorReaction? get _authorReaction {
+    final me = widget.myAddress?.toLowerCase();
+    final author = (widget.post.authorAddress ??
+            widget.post.channelOwnerAddress)
+        ?.toLowerCase();
+    if (me != null && author != null && me == author) {
+      final mine = _myEmojis();
+      return mine.isEmpty
+          ? null
+          : CommentAuthorReaction(address: widget.myAddress!, emoji: mine.first);
+    }
+    return widget.comment.postAuthorReaction;
+  }
+
+  /// The reader's emojis here, in the order added; empty = the empty heart.
+  List<String> _myEmojis() {
+    final out = <String>[
+      for (final e in widget.comment.userReactionEmojis)
+        if (_optimistic[e] != false) e,
+    ];
+    _optimistic.forEach((e, added) {
+      if (added && !out.contains(e)) out.add(e);
+    });
+    return out;
+  }
+
+  /// ADD-only, optimistic: the count and the jelly land at once. The parent's
+  /// verb is a toggle, so a "removed" answer (it was there already) is sent
+  /// again; a failure rolls back. True = the reaction is on.
+  Future<bool> _addReaction(String emoji) async {
+    if (!PublicOSChannels.canReact(widget.post)) return false;
+    if (_myEmojis().contains(emoji)) return true;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _optimistic[emoji] = true;
+      _reactPulse++;
+    });
+    var r = await widget.onReact(widget.comment, emoji);
+    if (r == false) r = await widget.onReact(widget.comment, emoji);
+    if (r != true) {
+      if (mounted) setState(() => _optimistic.remove(emoji));
+      return false;
+    }
+    return true;
+  }
+
+  /// The sheet's trash: the toggle again. True = it is gone.
+  Future<bool> _removeReaction(String emoji) async {
+    final r = await widget.onReact(widget.comment, emoji);
+    if (r == true) {
+      // It added (we were wrong about having it): put it back.
+      await widget.onReact(widget.comment, emoji);
+      return false;
+    }
+    return r == false;
+  }
+
+  /// The who-reacted sheet, the post's own: opens at once on the card's
+  /// counts, then fills its list
+  /// from `GET …/comments/:uid/reactions`.
+  void _showReactionSheet() {
+    final mine = _myEmojis();
+    final instant = [
+      for (final (e, n) in _displayedReactions())
+        MessageReactionSummary(
+          emoji: e,
+          count: n,
+          hasMyReaction: mine.contains(e),
+          senderInboxIds: const [],
+        ),
+    ];
+    // DESKTOP DELTA: the post card's host, a centered card in a Dialog
+    // (`asCard`), not the client's bottom sheet. Same widget, same args.
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (sheetCtx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 48),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+              maxWidth: DialogWidth.m, maxHeight: 560),
+          child: ReactionDetailsSheet(
+            asCard: true,
+            reactions: instant,
+            load: _loadReactionDetails,
+            onContactTap: (c) {
+              Navigator.of(sheetCtx).pop();
+              AppNav.toContact(context, c);
+            },
+            resolveMissing: (addr) async {
+              final c = await PublicOSContacts.resolveByIdentifier(addr);
+              if (c != null) await PublicOSContacts.saveContact(c);
+              return c;
+            },
+            onUnresolvedTap: (addr) {
+              Navigator.of(sheetCtx).pop();
+              AppNav.toProfile(context, addr);
+            },
+            currentUserId: widget.myAddress,
+            onRemoveMyReaction: _removeReaction,
+            onAddReaction: _addReaction,
+          ),
+        ),
+      ),
     );
+  }
+
+  Future<({List<MessageReactionSummary> reactions, Map<String, Contact> contacts})?>
+      _loadReactionDetails() async {
+    final data = await PublicOSChannels.getCommentReactions(
+        post: widget.post, comment: widget.comment);
+    if (data == null) return null;
+    final me = widget.myAddress?.toLowerCase();
+    final byEmoji = <String, List<String>>{};
+    for (final ur in data.userReactions) {
+      byEmoji.putIfAbsent(ur.emoji, () => []).add(ur.accountAddress);
+    }
+    final summaries = [
+      for (final r in data.reactions)
+        MessageReactionSummary(
+          emoji: r.emoji,
+          count: r.count,
+          hasMyReaction: me != null &&
+              (byEmoji[r.emoji] ?? const []).any((a) => a.toLowerCase() == me),
+          senderInboxIds: byEmoji[r.emoji] ?? const [],
+        ),
+    ];
+    final addrs = byEmoji.values.expand((a) => a).toSet().toList();
+    final found = await Future.wait(addrs.map(PublicOSContacts.searchContacts));
+    final contacts = <String, Contact>{
+      for (var i = 0; i < addrs.length; i++)
+        if (found[i] != null) addrs[i]: found[i]!,
+    };
+    return (reactions: summaries, contacts: contacts);
   }
 
   @override
@@ -668,6 +821,13 @@ class _CommentCardState extends State<CommentCard> {
                         color: tokens.textDim, fontSize: 12, height: 1.2),
                   ),
                 ),
+                // The post's author reacted to this comment: their mini avatar
+                // with their emoji in front, right of the time.
+                if (!comment.isDeleted && _authorReaction != null) ...[
+                  // 8, not the row's 6: it sits 2 px further right.
+                  const SizedBox(width: 8),
+                  _AuthorReactionBadge(reaction: _authorReaction!),
+                ],
                 // Content-hash-binding check: badge only on bad outcomes (bad
                 // signature, or a comment re-pointed at content it never signed).
                 // Unsigned / legacy / edited-since states stay invisible.
@@ -914,82 +1074,6 @@ class _CommentCardState extends State<CommentCard> {
     );
   }
 
-  /// The reaction chips, drawn in the action row right before the heart (the
-  /// post's grouping).
-  List<Widget> _reactionChips(GlassTokens tokens, Comment comment) {
-    // Two or more different emojis read as ONE group with a single counter,
-    // like a post's; a tap opens it into the per-emoji chips below.
-    final sorted = List.of(comment.reactions)
-      ..sort((a, b) => b.count.compareTo(a.count));
-    if (sorted.length >= 2 && !_reactionsOpen) {
-      final total = sorted.fold<int>(0, (s, r) => s + r.count);
-      return [
-        Material(
-          color: tokens.glassFillHover,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            onTap: () => setState(() => _reactionsOpen = true),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < sorted.length && i < 4; i++)
-                    Align(
-                      widthFactor: i == 0 ? 1.0 : 0.74,
-                      alignment: Alignment.centerRight,
-                      child: Text(sorted[i].emoji,
-                          style: const TextStyle(fontSize: 13)),
-                    ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$total',
-                    style: TextStyle(
-                      color: tokens.textDim,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ];
-    }
-    return
-      // Same chip as a post's reactions:
-      // borderless, emoji + a dim count; tapping still toggles yours.
-      comment.reactions.map((r) {
-        return GestureDetector(
-          onTap: () => widget.onReact(comment, r.emoji),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(r.emoji, style: const TextStyle(fontSize: 13)),
-                const SizedBox(width: 4),
-                Text(
-                  '${r.count}',
-                  style: TextStyle(
-                    color: tokens.textDim,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList();
-  }
-
   Widget _buildActionsRow(
       GlassTokens tokens, Comment comment, bool hasChildren) {
     final upActive = comment.userVote == 1;
@@ -1030,25 +1114,36 @@ class _CommentCardState extends State<CommentCard> {
           onTap: () => widget.onReply(comment),
         ),
         const SizedBox(width: 14),
-        // Reactions + the heart as one group, chips first (the post card's
-        // shape). Flexible + Wrap so a deep reply with many emojis wraps
-        // instead of overflowing; centred so chips and heart share a line.
+        // The single reaction button.
+        // Desktop: the emoji 17 / count 14 match the heart, nudged up 1.5 px
+        // (Segoe UI Emoji sits low), and the whole button sits 2 px lower to
+        // share Vote / Reply's line.
         Flexible(
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ..._reactionChips(tokens, comment),
-              Builder(
-                builder: (heartCtx) => _Chip(
-                  icon: Icons.favorite_border,
-                  label: '',
-                  color: tokens.textDim,
-                  onTap: () => _showQuickBar(heartCtx),
-                ),
-              ),
-            ],
+          child: Transform.translate(
+            offset: const Offset(0, 2),
+            child: ReactionButton(
+              reactions: _displayedReactions(),
+              mine: _myEmojis(),
+              canReact: PublicOSChannels.canReact(widget.post),
+              pulse: _reactPulse,
+              onHeart: () => _addReaction(ReactionPrefs.doubleTapEmojiSync),
+              onOpen: _showReactionSheet,
+              // Long press / long left click: the quick row.
+              onLongPress: PublicOSChannels.canReact(widget.post)
+                  ? (anchor) => ReactionQuickBar.show(
+                        anchor,
+                        onPick: _addReaction,
+                        onMore: () async {
+                          final e = await showEmojiPickerDialog(context);
+                          if (e != null && mounted) _addReaction(e);
+                        },
+                      )
+                  : null,
+              // The heart 18 px, padding 8/6: a ~34 x 30 tap area.
+              emojiSize: 17,
+              countSize: 14,
+              emojiNudge: -1.5,
+            ),
           ),
         ),
         if (hasChildren) ...[
@@ -1081,6 +1176,7 @@ class _Chip extends StatelessWidget {
   final Color? activeColor;
   final VoidCallback onTap;
 
+
   const _Chip({
     required this.icon,
     required this.label,
@@ -1105,6 +1201,100 @@ class _Chip extends StatelessWidget {
               style: TextStyle(color: color, fontSize: 12),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The post's author's reaction on a comment: their mini avatar, their emoji
+/// overlapping its lower right, in front. The author is looked up
+/// once per address for the whole thread (local contacts, then the chain).
+class _AuthorReactionBadge extends StatefulWidget {
+  final CommentAuthorReaction reaction;
+
+  const _AuthorReactionBadge({required this.reaction});
+
+  static final Map<String, Future<Contact?>> _lookups = {};
+
+  static Future<Contact?> _lookup(String address) =>
+      _lookups.putIfAbsent(address.toLowerCase(), () async {
+        try {
+          var c = await PublicOSContacts.searchContacts(address);
+          if (c == null) {
+            c = await PublicOSContacts.resolveByIdentifier(address);
+            if (c != null) await PublicOSContacts.saveContact(c);
+          }
+          return c;
+        } catch (_) {
+          return null;
+        }
+      });
+
+  @override
+  State<_AuthorReactionBadge> createState() => _AuthorReactionBadgeState();
+}
+
+class _AuthorReactionBadgeState extends State<_AuthorReactionBadge> {
+  /// DESKTOP DELTA: both 4 px bigger than the phone's 16 / 7.
+  static const double _avatar = 20;
+
+  /// The phone's 7 is a third of a 12 px emoji by area; no background circle.
+  static const double _emoji = 11;
+
+  Contact? _contact;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_AuthorReactionBadge old) {
+    super.didUpdateWidget(old);
+    if (old.reaction.address != widget.reaction.address) {
+      _contact = null;
+      _load();
+    }
+  }
+
+  void _load() {
+    final address = widget.reaction.address;
+    _AuthorReactionBadge._lookup(address).then((c) {
+      if (mounted && c != null && address == widget.reaction.address) {
+        setState(() => _contact = c);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      // +2: the emoji sits 2 px further right of the avatar.
+      width: _avatar + _emoji * 0.5 + 2,
+      height: _avatar,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            child: _contact != null
+                ? GlassContactIcon(contact: _contact, size: _avatar)
+                : GlassContactIcon(
+                    address: widget.reaction.address, size: _avatar),
+          ),
+          // The emoji at the avatar's lower right, in front, hanging a little
+          // below it.
+          Positioned(
+            right: 0,
+            bottom: -4,
+            child: Text(
+              widget.reaction.emoji,
+              style: const TextStyle(fontSize: _emoji, height: 1.0),
+            ),
+          ),
         ],
       ),
     );

@@ -223,7 +223,6 @@ class _ContactSettingsDialogState extends State<_ContactSettingsDialog> {
         key: key,
         value: encodeReadingWidth(width),
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365)),
       );
       await PublicOSSettings.setSetting(key, record);
     } catch (_) {}

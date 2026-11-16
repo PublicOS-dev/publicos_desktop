@@ -383,14 +383,17 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
-  Future<void> _reactToComment(Comment comment, String emoji) async {
+  /// The server verb is a toggle: true = added, false = removed, null =
+  /// failed (the error is shown here). The card's single reaction button
+  /// reads it to settle or roll back its optimistic change.
+  Future<bool?> _reactToComment(Comment comment, String emoji) async {
     try {
       final wasAdded = await PublicOSChannels.toggleCommentReaction(
         post: _post,
         comment: comment,
         emoji: emoji,
       );
-      if (!mounted) return;
+      if (!mounted) return wasAdded;
       final reactions = List<CommentReaction>.from(comment.reactions);
       final emojis = List<String>.from(comment.userReactionEmojis);
       if (wasAdded) {
@@ -419,9 +422,11 @@ class _PostDetailPageState extends State<PostDetailPage> {
       setState(() {
         _comments = _updateCommentInList(_comments, updated);
       });
+      return wasAdded;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return null;
       handleWriteError(context, e, fallbackMessage: 'Failed to react: $e');
+      return null;
     }
   }
 

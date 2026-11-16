@@ -13,7 +13,52 @@ import 'package:publicos_desktop/theme/glass_tokens.dart';
 /// null (cold start) — see `RssFeedsViewState._selected`. Defined here
 /// because the drawer is the lowest-level widget that needs it, and
 /// `feeds_view` imports this file already.
-enum FeedsView { discover, bookmarks, explore }
+/// The non-list selections. hotPosts · hotFeeds · latest are the rows of the
+/// EXPLORE section.
+enum FeedsView { discover, bookmarks, hotPosts, hotFeeds, latest }
+
+/// The three Explore rows.
+const exploreViews = [FeedsView.hotPosts, FeedsView.hotFeeds, FeedsView.latest];
+
+/// An Explore row's icon: the drawer row and the feeds header draw the same
+/// one.
+IconData exploreIcon(FeedsView v) => switch (v) {
+      FeedsView.hotFeeds => Icons.rss_feed_rounded,
+      FeedsView.latest => Icons.schedule_rounded,
+      _ => Icons.local_fire_department_rounded,
+    };
+
+/// Whether the drawer's EXPLORE section is open: open for a new user, then
+/// whatever they last chose, on this device. Sync reads come from
+/// a cache [warm] fills (the `ReactionPrefs` shape).
+class ExploreSectionPrefs {
+  ExploreSectionPrefs._();
+
+  static const String kKey = 'feeds_drawer_explore_open';
+  static bool? _cache;
+
+  static bool get openSync => _cache ?? true;
+
+  static Future<void> warm() async {
+    if (_cache != null) return;
+    try {
+      final v = (await PublicOSSettings.getSetting(kKey))?.value;
+      _cache = v == null || v.isEmpty ? true : v == 'true';
+    } catch (_) {
+      _cache = true;
+    }
+  }
+
+  static Future<void> setOpen(bool open) async {
+    _cache = open;
+    try {
+      await PublicOSSettings.setSetting(
+        kKey,
+        Record.asSettings(key: kKey, value: '$open', isSystem: true),
+      );
+    } catch (_) {}
+  }
+}
 
 /// JSON-feed URL for [channel], or null if we can't synthesize it. Must
 /// match the shape used by `RssFeedsViewState._channelJsonUrl` and by
@@ -47,8 +92,9 @@ class FeedsNavigationDrawer extends StatelessWidget {
   /// Open the Discover catalogue body. Sits above the LISTS section.
   final VoidCallback onDiscoverSelected;
 
-  /// Open Explore (what the network is reading). Sits above the LISTS section.
-  final VoidCallback onExploreSelected;
+  /// Open one Explore row (Hot posts · Hot feeds · Latest posts), from the
+  /// EXPLORE section above LISTS.
+  final ValueChanged<FeedsView> onExploreSelected;
   final VoidCallback onManageLists;
   /// null = no close button (desktop: the drawer is a fixed column, there is
   /// nothing to close).
@@ -150,14 +196,10 @@ class FeedsNavigationDrawer extends StatelessWidget {
                   //   onTap: onDiscoverSelected,
                   // ),
                   // const SizedBox(height: 6),
-                  _ListRow(
-                    icon: Icons.explore_rounded,
-                    iconColor: tokens.connectedAccent,
-                    label: context.l10n.feedsNavigationDrawerExplore,
-                    selected: sel == FeedsView.explore,
-                    onTap: onExploreSelected,
+                  _ExploreSection(
+                    selected: sel,
+                    onSelected: onExploreSelected,
                   ),
-                  const SizedBox(height: 6),
                   _SectionHeader(
                     label: context.l10n.feedsNavigationDrawerSectionLists,
                     trailing: _HeaderIconButton(
@@ -309,6 +351,89 @@ class _DrawerHeader extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// EXPLORE: a header that folds the three rows away; remembered on the
+/// device.
+class _ExploreSection extends StatefulWidget {
+  final Object? selected;
+  final ValueChanged<FeedsView> onSelected;
+
+  const _ExploreSection({required this.selected, required this.onSelected});
+
+  @override
+  State<_ExploreSection> createState() => _ExploreSectionState();
+}
+
+class _ExploreSectionState extends State<_ExploreSection> {
+  bool _open = ExploreSectionPrefs.openSync;
+
+  @override
+  void initState() {
+    super.initState();
+    ExploreSectionPrefs.warm().then((_) {
+      if (mounted && _open != ExploreSectionPrefs.openSync) {
+        setState(() => _open = ExploreSectionPrefs.openSync);
+      }
+    });
+  }
+
+  void _toggle() {
+    setState(() => _open = !_open);
+    ExploreSectionPrefs.setOpen(_open);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final l10n = context.l10n;
+    final rows = [
+      (FeedsView.hotPosts, exploreIcon(FeedsView.hotPosts), l10n.exploreHotPosts),
+      (FeedsView.hotFeeds, exploreIcon(FeedsView.hotFeeds), l10n.exploreHotFeeds),
+      (FeedsView.latest, exploreIcon(FeedsView.latest), l10n.exploreLatestPosts),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: _toggle,
+          child: _SectionHeader(
+            label: l10n.feedsNavigationDrawerSectionExplore,
+            trailing: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: AnimatedRotation(
+                turns: _open ? 0 : -0.25,
+                duration: const Duration(milliseconds: 180),
+                child: Icon(Icons.expand_more_rounded,
+                    size: 20, color: tokens.textDim),
+              ),
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _open
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (view, icon, label) in rows)
+                      _ListRow(
+                        icon: icon,
+                        iconColor: tokens.connectedAccent,
+                        label: label,
+                        selected: widget.selected == view,
+                        onTap: () => widget.onSelected(view),
+                      ),
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+        const SizedBox(height: 6),
+      ],
     );
   }
 }

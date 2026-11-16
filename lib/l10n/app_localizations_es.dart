@@ -2406,7 +2406,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este inbox está registrado en tu cuenta pero ninguna llave privada para él vive en este dispositivo, así que no podemos cargar identidades ni instalaciones. Importa la llave desde otro dispositivo (llavero o mnemónico) para gestionarlo aquí.';
 
   @override
-  String get inboxIdsLinkedAccounts => 'Cuentas vinculadas';
+  String get inboxIdsNotSetUpTitle => 'Sin configurar en este dispositivo';
+
+  @override
+  String get inboxIdsNotSetUpBody =>
+      'Esta llave está en este dispositivo, pero no está configurada para mensajes aquí, así que su inbox no se puede mostrar. Selecciona la llave en el llavero para configurarla.';
+
+  @override
+  String get inboxIdsLinkedAccounts => 'Llaves vinculadas';
 
   @override
   String get inboxIdsInstallations => 'Instalaciones';
@@ -2671,11 +2678,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Frase de recuperación de 12 o 24 palabras';
 
   @override
-  String get inboxIdsAddAccountTitle => 'AGREGAR CUENTA';
+  String get inboxIdsAddAccountTitle => 'AGREGAR LLAVE';
 
   @override
-  String get inboxIdsAddAccountSubtitle =>
-      'Vincula una billetera adicional a este inbox.';
+  String get inboxIdsAddAccountSubtitle => 'Vincula otra llave a este inbox.';
 
   @override
   String get inboxIdsMethodImportKeyTitle => 'Importar llave';
@@ -2683,6 +2689,81 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get inboxIdsMethodImportKeySubtitle =>
       'Importar desde mnemónico o llave privada';
+
+  @override
+  String get inboxIdsMethodQrTitle => 'QR desde otro teléfono';
+
+  @override
+  String get inboxIdsMethodQrSubtitle =>
+      'En el teléfono que tiene la llave: Llavero, abre la llave, Agregar a otro inbox. Luego escanea su QR con la cámara de este teléfono.';
+
+  @override
+  String linkKeyPickInboxTitle(String address) {
+    return '¿A QUÉ INBOX AGREGAR $address?';
+  }
+
+  @override
+  String get linkKeyNoInboxes =>
+      'Este teléfono no tiene un inbox al que agregar la llave.';
+
+  @override
+  String get linkKeyConfirmTitle => 'AGREGAR LLAVE';
+
+  @override
+  String linkKeyConfirmBody(String address, String inbox) {
+    return '¿Seguro que quieres agregar $address al inbox $inbox?';
+  }
+
+  @override
+  String get linkKeyAddedTitle => 'LLAVE AGREGADA';
+
+  @override
+  String linkKeyAddedBody(String address, String inbox) {
+    return '$address ahora es parte del inbox $inbox. Este teléfono no guardó la llave.\n\nEn el teléfono que mostró el QR, abre el llavero y toca Actualizar.';
+  }
+
+  @override
+  String get linkKeyInvalid => 'Este QR no contiene una llave válida.';
+
+  @override
+  String get linkKeyAdd => 'Agregar';
+
+  @override
+  String get keychainActionAddToInbox => 'Agregar a otro inbox';
+
+  @override
+  String get keychainActionAddToInboxSub =>
+      'Muestra esta llave como un QR, para escanearlo con tu otro teléfono y agregarla a un inbox ahí.';
+
+  @override
+  String get keyQrWarningTitle => 'ESTE QR ES TU LLAVE';
+
+  @override
+  String get keyQrWarningBody =>
+      'El QR contiene la llave misma. Quien lo escanee, o vea una foto de él, obtiene tu llave.\n\nNo dejes que nadie más lo vea. No le tomes foto ni captura de pantalla, y no lo compartas. Escanéalo solo con tu propio teléfono.\n\nSi esta llave está vinculada a otro inbox, agregarla a uno nuevo la mueve: el inbox anterior pierde esta llave y las conversaciones a las que llegaba con ella.';
+
+  @override
+  String keyQrTitle(String label) {
+    return 'AGREGAR $label A OTRO INBOX';
+  }
+
+  @override
+  String get keyQrInstructions =>
+      'Escanéalo con la cámara de tu otro teléfono. PublicOS se abre ahí y pregunta a qué inbox agregar la llave. Luego toca Actualizar en este llavero.';
+
+  @override
+  String get keyQrNeverShare => 'Nunca dejes que nadie más vea este QR.';
+
+  @override
+  String get keychainRefresh => 'Actualizar llaves';
+
+  @override
+  String get keychainRefreshDone => 'Llaves actualizadas';
+
+  @override
+  String keychainRefreshMoved(String labels) {
+    return '$labels se movió a otro inbox';
+  }
 
   @override
   String get inboxIdsImportKeyTitle => 'IMPORTAR LLAVE';
@@ -2700,7 +2781,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get inboxIdsActionRenameLabel => 'Renombrar etiqueta';
 
   @override
-  String get inboxIdsActionAddAccount => 'Agregar cuenta';
+  String get inboxIdsActionAddAccount => 'Agregar llave';
 
   @override
   String get inboxIdsActionSyncing => 'Sincronizando…';
@@ -2821,10 +2902,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No hay llaves disponibles en el llavero';
 
   @override
-  String get inboxIdsAccountAdded => 'Cuenta agregada';
+  String get inboxIdsAccountAdded => 'Llave agregada';
 
   @override
-  String get inboxIdsAccountAddFailed => 'No se pudo agregar la cuenta';
+  String get inboxIdsAccountAddFailed => 'No se pudo agregar la llave';
 
   @override
   String get inboxIdsErrorInvalidKeyFormat =>
@@ -3182,6 +3263,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get protocolAgreementAccept => 'ACEPTAR Y CONTINUAR';
+
+  @override
+  String get protocolAgreementAgeCheck =>
+      'Tengo 16 años o más, y edad suficiente donde vivo para aceptar esto por mi cuenta.';
 
   @override
   String get protocolAgreementLoadFailed =>
@@ -6493,6 +6578,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo quitar la reacción';
 
   @override
+  String get reactionDetailsSheetAddFailed => 'No se pudo agregar la reacción';
+
+  @override
   String get reactionDetailsSheetNoReactions => 'Aún no hay reacciones.';
 
   @override
@@ -7374,6 +7462,31 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get historySheetEmptyBody =>
       'Las propuestas pasadas aparecerán aquí cuando alguna se ejecute, cancele o expire.';
+
+  @override
+  String historySheetNoVotesWeeks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sin votaciones en las últimas $count semanas',
+      one: 'Sin votaciones esta última semana',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String historySheetWindow(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'últimas $count semanas',
+      one: 'última semana',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historySheetLoadWeekBefore => 'Cargar la semana anterior';
 
   @override
   String get membersSheetRemoveTitle => '¿Sacar miembro?';
@@ -15262,6 +15375,25 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get exploreEmptySubtitle =>
       'Cada 10 minutos los servidores de la red acuerdan qué es lo más leído. Desliza hacia abajo para volver a revisar.';
+
+  @override
+  String get feedsNavigationDrawerSectionExplore => 'EXPLORAR';
+
+  @override
+  String get exploreHotPosts => 'Publicaciones populares';
+
+  @override
+  String get exploreHotFeeds => 'Canales populares';
+
+  @override
+  String get exploreLatestPosts => 'Publicaciones recientes';
+
+  @override
+  String get exploreLatestEmptyTitle => 'Todavía no hay nada nuevo';
+
+  @override
+  String get exploreLatestEmptySubtitle =>
+      'Aquí aparecen las publicaciones públicas más recientes de toda la red, actualizadas cada 10 minutos. Desliza hacia abajo para volver a revisar.';
 
   @override
   String get matureGateTitle => 'Contenido para adultos';

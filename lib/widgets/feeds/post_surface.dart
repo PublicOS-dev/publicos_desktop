@@ -137,6 +137,18 @@ class _PostSurfaceState extends State<PostSurface> implements PostListHost {
     widget.source.removeListener(_onSourceChanged);
     widget.source.detach();
     _ownedScrollController?.dispose();
+    // Leaving mid-refresh: take the hint out of the host's header, as
+    // PostListView does for its docked chip. Otherwise it spins forever:
+    // `_report` drops its post-frame call once we are unmounted, and desktop
+    // unmounts this list whenever a post opens in place. Refreshing only:
+    // the blocking loader is raised eagerly by the hosts on a switch, so a
+    // late `false` from here would race the new list's `true`. Post-frame,
+    // because an ancestor's setState is not allowed while the tree is
+    // finalized; the hosts check `mounted`.
+    if (_lastReportedRefreshing) {
+      final cb = widget.onRefreshingChanged;
+      WidgetsBinding.instance.addPostFrameCallback((_) => cb?.call(false));
+    }
     super.dispose();
   }
 

@@ -24,6 +24,11 @@ class AppNav {
   /// `kShellDestinations` index.
   static void Function(int index)? onOpenDestination;
 
+  /// Set by `AppShell`. Switch the shell to the Feeds pane, so a post can open
+  /// in its reading column ([toPost]) from anywhere (e.g. a
+  /// notification's post).
+  static VoidCallback? onShowFeeds;
+
   /// Open a contact's profile. Desktop: focus the Contacts pane on [contact].
   static void toContact(BuildContext context, Contact contact) {
     onOpenContact?.call(contact);

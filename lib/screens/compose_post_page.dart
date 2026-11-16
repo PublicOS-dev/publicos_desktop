@@ -130,7 +130,6 @@ class ComposePostPage extends StatefulWidget {
         Record.asSettings(
           key: lastChannelKey,
           value: channel.id.toString(),
-          expiration: DateTime.now().add(const Duration(days: 365)),
           isExpired: false,
           isSystem: true,
         ),

@@ -112,7 +112,6 @@ class ChatAppearance extends ChangeNotifier {
         key: key,
         // Empty string = cleared; _read's parsers treat it as null/default.
         value: value ?? '',
-        expiration: DateTime.now().add(const Duration(days: 365)),
         isExpired: false,
         isSystem: true,
       );

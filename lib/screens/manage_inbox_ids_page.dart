@@ -45,6 +45,12 @@ import 'package:publicos_desktop/widgets/error/error_l10n.dart';
 /// active client). `_originalKeyLabel` is saved in `initState` and restored in
 /// `dispose`, so the messages tab's cached conversations remain valid by the
 /// time the user navigates back.
+///
+/// The switch can fail (a key that is on this device but not set up for
+/// messages here: `selectKey` throws). Nothing is then read or offered for
+/// that row: `_isActiveInbox` gates `_fetchInboxState` and every action that
+/// runs on the active client, and the drawer shows the not-set-up note,
+/// never the active key's inbox under that row.
 
 // ============================================================================
 // Private data models
@@ -154,6 +160,21 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
   final Map<String, _InboxStateData?> _stateCache = {};
   final Map<String, bool> _loadingStates = {};
   String? _currentInstallationId;
+
+  /// Inboxes whose key is on this device but could not be made the active
+  /// XMTP client (the key is not set up for messages here). Their drawer
+  /// shows a note, never data: everything the drawer reads and every action
+  /// it offers runs on the ACTIVE client.
+  final Set<String> _notActiveHere = {};
+
+  /// True only when the active XMTP client IS [inboxId]. The gate for
+  /// everything that reads or writes through the active client.
+  bool _isActiveInbox(String inboxId) {
+    final active = Contact.normalizeInboxId(PublicOS.clientXmtpInboxId);
+    final wanted = Contact.normalizeInboxId(inboxId);
+    if (active == null || wanted == null) return false;
+    return active.toLowerCase() == wanted.toLowerCase();
+  }
 
   bool _isSyncingConsent = false;
   bool _isSyncingHistory = false;
@@ -515,7 +536,19 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
 
     if (entry.localKeys.isNotEmpty) {
       await _switchToKeyForInbox(inboxId);
-      await _fetchInboxState(inboxId);
+      if (_isActiveInbox(inboxId)) {
+        _notActiveHere.remove(inboxId);
+        // The installation id belongs to the active client: re-read it, or
+        // THIS DEVICE (and the revoke button it hides) follows the old key.
+        await _loadCurrentInstallationId();
+        await _fetchInboxState(inboxId);
+      } else {
+        // The switch did not land (key not set up here). Reading now would
+        // return the inbox of whichever key IS active.
+        debugPrint(
+            '[InboxMgr] expand $inboxId: active client is ${PublicOS.clientXmtpInboxId} (key "${PublicOS.currentXmtpKeyLabel}"), not this inbox. Showing the not-set-up note.');
+        _notActiveHere.add(inboxId);
+      }
     }
 
     // User may have bailed / tapped a different row mid-fetch; don't
@@ -545,6 +578,13 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
 
   Future<void> _fetchInboxState(String inboxId) async {
     if (_loadingStates[inboxId] == true) return;
+    // `getInboxState` reads the ACTIVE client's inbox. Never file that under
+    // another inbox's row.
+    if (!_isActiveInbox(inboxId)) {
+      debugPrint(
+          '[InboxMgr] fetch $inboxId skipped: active client is ${PublicOS.clientXmtpInboxId}');
+      return;
+    }
     setState(() => _loadingStates[inboxId] = true);
 
     try {
@@ -552,6 +592,17 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
           await PublicOSXmtp.getInboxState(refreshFromNetwork: true);
       if (!mounted) return;
       if (state == null) {
+        setState(() => _loadingStates[inboxId] = false);
+        return;
+      }
+      // Checked again on what came back: the answer must be about this inbox.
+      final gotId = Contact.normalizeInboxId(state['inboxId'] as String?);
+      if (!_isActiveInbox(inboxId) ||
+          (gotId != null &&
+              gotId.toLowerCase() !=
+                  Contact.normalizeInboxId(inboxId)?.toLowerCase())) {
+        debugPrint(
+            '[InboxMgr] fetch $inboxId dropped: answer is for ${state['inboxId']}');
         setState(() => _loadingStates[inboxId] = false);
         return;
       }
@@ -791,6 +842,11 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
     _InboxStateData inboxState,
   ) async {
     final l10n = context.l10n;
+    // Runs on the active client: refuse unless that IS this inbox.
+    if (!_isActiveInbox(inboxState.inboxId)) {
+      _showSnack(l10n.inboxIdsInstallationRevokeFailed);
+      return;
+    }
     final confirmed = await _confirmDestructive(
       title: l10n.inboxIdsRevokeInstallationTitle,
       body: l10n.inboxIdsRevokeInstallationBody(shortenString(installationId)),
@@ -839,6 +895,11 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
   ) async {
     final otherCount = inboxState.installations.length - 1;
     final l10n = context.l10n;
+    // Runs on the active client: refuse unless that IS this inbox.
+    if (!_isActiveInbox(entry.inboxId)) {
+      _showSnack(l10n.inboxIdsRevokeInstallationsFailed);
+      return;
+    }
 
     final confirmed = await _confirmDestructive(
       title: l10n.inboxIdsRevokeAllTitle,
@@ -887,6 +948,11 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
     _InboxStateData inboxState,
   ) async {
     final l10n = context.l10n;
+    // Runs on the active client: refuse unless that IS this inbox.
+    if (!_isActiveInbox(inboxState.inboxId)) {
+      _showSnack(l10n.inboxIdsAccountRemoveFailed);
+      return;
+    }
     final confirmed = await _confirmDestructive(
       title: l10n.inboxIdsRemoveAccountTitle,
       body: l10n.inboxIdsRemoveAccountBody(shortenString(identifier)),
@@ -1055,6 +1121,11 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
     _InboxEntry entry,
     _InboxStateData inboxState,
   ) async {
+    // The add runs on the active client: refuse unless that IS this inbox.
+    if (!_isActiveInbox(entry.inboxId)) {
+      _showSnack(context.l10n.inboxIdsAccountAddFailed);
+      return;
+    }
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => const _AddAccountOptionsDialog(),
@@ -1891,7 +1962,12 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
     // Collapsing `inboxState == null → spinner` into the loading check
     // prevents a "Failed to load" flash on the first frame after expand.
     final noLocalKey = inboxState == null && !entry.isManageable;
-    final showSpinner = isLoading || (inboxState == null && !noLocalKey);
+    // The key is here but is not set up for messages on this device, so the
+    // client could not be switched to it: a note, never another inbox's data.
+    final notSetUpHere =
+        inboxState == null && _notActiveHere.contains(entry.inboxId);
+    final showSpinner =
+        isLoading || (inboxState == null && !noLocalKey && !notSetUpHere);
 
     return Container(
       margin: const EdgeInsets.only(top: 6),
@@ -1915,8 +1991,8 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
                 ),
               ),
             )
-          : noLocalKey
-              ? _buildNoLocalKeyState(entry, tokens)
+          : (noLocalKey || notSetUpHere)
+              ? _buildNoLocalKeyState(entry, tokens, notSetUp: notSetUpHere)
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1938,7 +2014,8 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
   /// require the XMTP client to be on that key), so the drawer just
   /// surfaces an explainer + the existing copy/delete row actions stay
   /// available up above.
-  Widget _buildNoLocalKeyState(_InboxEntry entry, GlassTokens tokens) {
+  Widget _buildNoLocalKeyState(_InboxEntry entry, GlassTokens tokens,
+      {bool notSetUp = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1951,7 +2028,9 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
             ),
             const SizedBox(width: 8),
             Text(
-              context.l10n.inboxIdsNoLocalKeyTitle,
+              notSetUp
+                  ? context.l10n.inboxIdsNotSetUpTitle
+                  : context.l10n.inboxIdsNoLocalKeyTitle,
               style: TextStyle(
                 fontFamily: 'SpaceGrotesk',
                 color: tokens.starkWhite,
@@ -1964,7 +2043,9 @@ class _ManageInboxIdsPageState extends State<ManageInboxIdsPage>
         ),
         const SizedBox(height: 6),
         Text(
-          context.l10n.inboxIdsNoLocalKeyBody,
+          notSetUp
+              ? context.l10n.inboxIdsNotSetUpBody
+              : context.l10n.inboxIdsNoLocalKeyBody,
           style: TextStyle(
             fontFamily: 'SpaceGrotesk',
             color: tokens.textDim,

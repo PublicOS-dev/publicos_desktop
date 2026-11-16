@@ -139,7 +139,14 @@ class FeedsPaneState extends State<FeedsPane> {
 
   bool get _isViewingBookmarks => _selected == FeedsView.bookmarks;
   bool get _isViewingDiscover => _selected == FeedsView.discover;
-  bool get _isViewingExplore => _selected == FeedsView.explore;
+  bool get _isViewingExplore => exploreViews.contains(_selected);
+
+  /// The Explore row on screen (three rows, one view).
+  ExploreMode get _exploreMode => switch (_selected) {
+        FeedsView.hotFeeds => ExploreMode.hotFeeds,
+        FeedsView.latest => ExploreMode.latest,
+        _ => ExploreMode.hotPosts,
+      };
 
   /// The body is a PostsList (a channel, a single or a list), the surface
   /// the header's refresh button reloads.
@@ -336,8 +343,12 @@ class FeedsPaneState extends State<FeedsPane> {
         return context.l10n.feedsViewDiscover;
       case FeedsView.bookmarks:
         return context.l10n.feedsViewBookmarks;
-      case FeedsView.explore:
-        return context.l10n.feedsViewExplore;
+      case FeedsView.hotPosts:
+        return context.l10n.exploreHotPosts;
+      case FeedsView.hotFeeds:
+        return context.l10n.exploreHotFeeds;
+      case FeedsView.latest:
+        return context.l10n.exploreLatestPosts;
       case Channel ch:
         return ch.name;
       case FeedList list:
@@ -548,8 +559,10 @@ class FeedsPaneState extends State<FeedsPane> {
     switch (_selected) {
       case FeedsView.bookmarks:
         return 'bookmarks';
-      case FeedsView.explore:
-        return 'explore';
+      case FeedsView.hotPosts:
+      case FeedsView.hotFeeds:
+      case FeedsView.latest:
+        return 'explore-${(_selected as FeedsView).name}';
       case Channel ch:
         return 'channel-${ch.id}';
       case FeedList list:
@@ -567,6 +580,7 @@ class FeedsPaneState extends State<FeedsPane> {
   @override
   void initState() {
     super.initState();
+    ExploreSectionPrefs.warm(); // the drawer's EXPLORE open/closed, read before it opens
 
     // A pending "Go to feed" lands before the cold-start bootstrap, which
     // only picks a default when nothing is selected.
@@ -805,17 +819,16 @@ class FeedsPaneState extends State<FeedsPane> {
     } catch (_) {}
   }
 
-  /// Pin [channel] as a router tab by writing an `rss.<slug>` router
+  /// Pin [channel] as a router tab by writing a `channel.<slug>` router
   /// record. Mirrors `ManageServerPage._addChannelAsTab`.
   Future<void> _addChannelAsTab(Channel channel) async {
     final url = _channelJsonUrl(channel);
     if (url == null) return;
     final record = Record.asRouter(
-      key: 'rss.${channel.slug}',
+      key: Record.channelTabKey(channel.slug),
       routerSubtype: RouterSubtype.channel,
       value: url,
       name: channel.name,
-      expiration: DateTime.now().add(const Duration(days: 365)),
     );
     final ok = await PublicOSContacts.setRecord(record);
     if (ok && mounted) await _onTabsChanged();
@@ -1332,6 +1345,11 @@ class FeedsPaneState extends State<FeedsPane> {
     // surface like Bookmarks — no roster.
     if (_isViewingExplore) {
       return ExploreView(
+        // One view per row: without a key the State (and its source) is
+        // reused across rows, so a row change loads nothing and the spinner
+        // waits forever.
+        key: ValueKey('explore-${_exploreMode.name}'),
+        mode: _exploreMode,
         color: widget.color,
         titleTextSize: _titleTextSize,
         descriptionTextSize: _descriptionTextSize,
@@ -1431,7 +1449,7 @@ class FeedsPaneState extends State<FeedsPane> {
             onChannelSelected: _select,
             onBookmarksSelected: () => _select(FeedsView.bookmarks),
             onDiscoverSelected: () => _select(FeedsView.discover),
-            onExploreSelected: () => _select(FeedsView.explore),
+            onExploreSelected: _select,
             onManageLists: _showManageListsSheet,
             onCreateChannel: _showCreateChannelPage,
             onSettings: showSettingsSheet,
@@ -1599,7 +1617,11 @@ class FeedsPaneState extends State<FeedsPane> {
       );
     } else {
       Widget leadingIcon;
-      if (_isViewingBookmarks) {
+      if (_isViewingExplore) {
+        // The drawer row's own icon and tint.
+        leadingIcon = Icon(exploreIcon(_selected as FeedsView),
+            size: 20, color: tokens.connectedAccent);
+      } else if (_isViewingBookmarks) {
         leadingIcon = Icon(Icons.bookmark_rounded,
             size: 20, color: tokens.fallbackAccent);
       } else if (_selectedChannel != null && _selectedChannel!.isOpen) {

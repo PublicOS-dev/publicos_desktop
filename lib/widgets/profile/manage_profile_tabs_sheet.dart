@@ -253,7 +253,7 @@ class _ManageProfileTabsSheetState extends State<ManageProfileTabsSheet> {
               key: recordToSave.key,
               value: jsonEncode(recordToSave.toChainValue()),
               expiration:
-                  BigInt.from(recordToSave.expiration.millisecondsSinceEpoch),
+                  recordToSave.chainExpiration,
               recordType: BigInt.from(recordToSave.type.index),
               customType: recordToSave.subtype ?? '',
             );

@@ -521,7 +521,6 @@ class _EditProfileImageSheetState extends State<EditProfileImageSheet>
       key: _isBanner ? 'profile.banner.nft' : 'profile.avatar.nft',
       value: p.ref.encode(),
       isSystem: true,
-      expiration: DateTime.now().add(const Duration(days: 365)),
     );
     await _commitRecords(
         [record], context.l10n.editProfileImageSheetSaveNftError);
@@ -530,7 +529,7 @@ class _EditProfileImageSheetState extends State<EditProfileImageSheet>
   Future<void> _handleSaveImage() async {
     final p = _pending;
     if (p is! _PendingImage) return;
-    final expiration = DateTime.now().add(const Duration(days: 365));
+    final expiration = Record.never; // records do not expire
     final records = <Record>[
       Record.asSettings(
         key: _isAvatar ? 'profile.avatar' : 'profile.banner',
@@ -628,7 +627,6 @@ class _EditProfileImageSheetState extends State<EditProfileImageSheet>
       key: key,
       value: '',
       isSystem: true,
-      expiration: DateTime.now().add(const Duration(days: 365)),
     );
     await _commitRecords([record], l10n.editProfileImageSheetRemoveImageError);
   }

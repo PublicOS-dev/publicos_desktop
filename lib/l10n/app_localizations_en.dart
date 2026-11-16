@@ -2371,7 +2371,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'This inbox is registered on your account but no private key for it lives on this device, so we can\'t load identities or installations. Import the key from another device (keychain or mnemonic) to manage it here.';
 
   @override
-  String get inboxIdsLinkedAccounts => 'Linked accounts';
+  String get inboxIdsNotSetUpTitle => 'Not set up on this device';
+
+  @override
+  String get inboxIdsNotSetUpBody =>
+      'This key is on this device, but it isn\'t set up for messages here, so its inbox can\'t be shown. Select the key in the keychain to set it up.';
+
+  @override
+  String get inboxIdsLinkedAccounts => 'Linked keys';
 
   @override
   String get inboxIdsInstallations => 'Installations';
@@ -2633,11 +2640,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inboxIdsMethodMnemonicSubtitle => '12 or 24 word recovery phrase';
 
   @override
-  String get inboxIdsAddAccountTitle => 'ADD ACCOUNT';
+  String get inboxIdsAddAccountTitle => 'ADD KEY';
 
   @override
-  String get inboxIdsAddAccountSubtitle =>
-      'Link an additional wallet to this inbox.';
+  String get inboxIdsAddAccountSubtitle => 'Link another key to this inbox.';
 
   @override
   String get inboxIdsMethodImportKeyTitle => 'Import key';
@@ -2645,6 +2651,80 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get inboxIdsMethodImportKeySubtitle =>
       'Import from mnemonic or private key';
+
+  @override
+  String get inboxIdsMethodQrTitle => 'QR from another phone';
+
+  @override
+  String get inboxIdsMethodQrSubtitle =>
+      'On the phone that holds the key: Keychain, open the key, Add to another inbox. Then scan its QR with this phone\'s camera.';
+
+  @override
+  String linkKeyPickInboxTitle(String address) {
+    return 'ADD $address TO WHICH INBOX?';
+  }
+
+  @override
+  String get linkKeyNoInboxes => 'This phone has no inbox to add the key to.';
+
+  @override
+  String get linkKeyConfirmTitle => 'ADD KEY';
+
+  @override
+  String linkKeyConfirmBody(String address, String inbox) {
+    return 'Are you sure you want to add $address to inbox $inbox?';
+  }
+
+  @override
+  String get linkKeyAddedTitle => 'KEY ADDED';
+
+  @override
+  String linkKeyAddedBody(String address, String inbox) {
+    return '$address is now part of inbox $inbox. This phone did not keep the key.\n\nOn the phone that showed the QR, open the keychain and tap Refresh.';
+  }
+
+  @override
+  String get linkKeyInvalid => 'This QR does not carry a valid key.';
+
+  @override
+  String get linkKeyAdd => 'Add';
+
+  @override
+  String get keychainActionAddToInbox => 'Add to another inbox';
+
+  @override
+  String get keychainActionAddToInboxSub =>
+      'Show this key as a QR, to scan with your other phone and add it to an inbox there.';
+
+  @override
+  String get keyQrWarningTitle => 'THIS QR IS YOUR KEY';
+
+  @override
+  String get keyQrWarningBody =>
+      'The QR carries this key itself. Anyone who scans it, or sees a photo of it, gets your key.\n\nDo not let anyone else see it. Do not take a photo or a screenshot of it, and do not share it. Scan it only with your own phone.\n\nIf this key is linked to another inbox, adding it to a new one moves it: the old inbox loses this key and the conversations it reached through it.';
+
+  @override
+  String keyQrTitle(String label) {
+    return 'ADD $label TO ANOTHER INBOX';
+  }
+
+  @override
+  String get keyQrInstructions =>
+      'Scan this with your other phone\'s camera. PublicOS opens there and asks which inbox to add the key to. Then tap Refresh in this keychain.';
+
+  @override
+  String get keyQrNeverShare => 'Never let anyone else see this QR.';
+
+  @override
+  String get keychainRefresh => 'Refresh keys';
+
+  @override
+  String get keychainRefreshDone => 'Keys refreshed';
+
+  @override
+  String keychainRefreshMoved(String labels) {
+    return '$labels moved to another inbox';
+  }
 
   @override
   String get inboxIdsImportKeyTitle => 'IMPORT KEY';
@@ -2662,7 +2742,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inboxIdsActionRenameLabel => 'Rename label';
 
   @override
-  String get inboxIdsActionAddAccount => 'Add account';
+  String get inboxIdsActionAddAccount => 'Add key';
 
   @override
   String get inboxIdsActionSyncing => 'Syncing…';
@@ -2774,10 +2854,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inboxIdsNoAvailableKeys => 'No available keys in keychain';
 
   @override
-  String get inboxIdsAccountAdded => 'Account added';
+  String get inboxIdsAccountAdded => 'Key added';
 
   @override
-  String get inboxIdsAccountAddFailed => 'Failed to add account';
+  String get inboxIdsAccountAddFailed => 'Failed to add key';
 
   @override
   String get inboxIdsErrorInvalidKeyFormat => 'Error: invalid key format';
@@ -3125,6 +3205,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get protocolAgreementAccept => 'ACCEPT AND CONTINUE';
+
+  @override
+  String get protocolAgreementAgeCheck =>
+      'I am 16 or older, and old enough where I live to accept this on my own.';
 
   @override
   String get protocolAgreementLoadFailed =>
@@ -6379,6 +6463,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reactionDetailsSheetRemoveFailed => 'Failed to remove reaction';
 
   @override
+  String get reactionDetailsSheetAddFailed => 'Failed to add reaction';
+
+  @override
   String get reactionDetailsSheetNoReactions => 'No reactions yet.';
 
   @override
@@ -7241,6 +7328,31 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get historySheetEmptyBody =>
       'Past proposals will appear here once any are executed, cancelled, or expired.';
+
+  @override
+  String historySheetNoVotesWeeks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'No votes in the last $count weeks',
+      one: 'No votes this last week',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String historySheetWindow(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'last $count weeks',
+      one: 'last week',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get historySheetLoadWeekBefore => 'Load the week before';
 
   @override
   String get membersSheetRemoveTitle => 'Remove member?';
@@ -15037,6 +15149,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get exploreEmptySubtitle =>
       'Every 10 minutes the servers on the network agree on what is being read most. Pull down to check again.';
+
+  @override
+  String get feedsNavigationDrawerSectionExplore => 'EXPLORE';
+
+  @override
+  String get exploreHotPosts => 'Hot posts';
+
+  @override
+  String get exploreHotFeeds => 'Hot feeds';
+
+  @override
+  String get exploreLatestPosts => 'Latest posts';
+
+  @override
+  String get exploreLatestEmptyTitle => 'Nothing new yet';
+
+  @override
+  String get exploreLatestEmptySubtitle =>
+      'The newest public posts from across the network show here, refreshed every 10 minutes. Pull down to check again.';
 
   @override
   String get matureGateTitle => 'Mature content';

@@ -878,8 +878,6 @@ class WalletViewState extends State<WalletView> {
                                 key: 'wallet_manager_app',
                                 value: app.appName,
                                 isSystem: true,
-                                expiration: DateTime.now()
-                                    .add(const Duration(days: 365 * 10)),
                               ),
                             );
                           } catch (e) {
@@ -966,7 +964,6 @@ class WalletViewState extends State<WalletView> {
         key: key,
         value: emoji,
         isSystem: true,
-        expiration: DateTime.now().add(const Duration(days: 365 * 10)),
       ),
     );
     await _refreshWalletBalances();
