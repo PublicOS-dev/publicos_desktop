@@ -442,7 +442,26 @@ class _ContactsPaneState extends State<ContactsPane> {
       // landing, and only one landing can be in flight at a time.
       if (landingApp != null || landingTabKey != null) _landingGen++;
     });
+    if (c.createdAt == null) _fillStoredJoined(gen);
     _syncSelectedFromChain(gen);
+  }
+
+  /// A contact handed in from outside the list (a post author, a mention, a
+  /// search hit) may not carry the stored "Joined" date. Read it from the
+  /// local row so the profile shows it at once, not when the chain sync lands.
+  Future<void> _fillStoredJoined(int gen) async {
+    final addr = _selected?.publicosAddress;
+    if (addr == null) return;
+    try {
+      final stored = await PublicOSContacts.getContact(addr);
+      final joined = stored?.createdAt;
+      if (joined == null || !mounted || gen != _selectGen) return;
+      final current = _selected;
+      if (current == null || current.createdAt != null) return;
+      setState(() => _selected = current.copyWith(createdAt: joined));
+    } catch (_) {
+      // No local row: the chain sync fills it.
+    }
   }
 
   // ── Context menu (right-click a row) ────────────────────────────────────────
@@ -977,8 +996,8 @@ class _ContactsPaneState extends State<ContactsPane> {
     try {
       final fetched = await PublicOSContacts.fetchContact(addr);
       if (g != _selectGen || !mounted) return; // superseded — drop it
-      // fetchContact never resolves createdAt: keep the one we already hold,
-      // else look it up once (the "Joined" row on the profile).
+      // The "Joined" row: keep the date we already hold on screen, and let
+      // the chain read replace it only if it comes back different.
       final fresh = await _withCreatedAt(
         fetched.copyWith(createdAt: _selected?.createdAt),
       );
@@ -997,11 +1016,11 @@ class _ContactsPaneState extends State<ContactsPane> {
   }
 
   /// Port of publicos_client `browser.dart` `_withCreatedAt`: returns [c] with
-  /// `Contact.createdAt` filled from chain when it was null — an immutable
-  /// value, fetched once and never refetched. Pure: no setState, no save.
-  /// Failures return [c] unchanged (future visits retry).
+  /// `Contact.createdAt` read from chain. The stored value is what the profile
+  /// shows while this runs; it is replaced only when the chain answers with a
+  /// different date. Pure: no setState, no save. A failed or empty read
+  /// returns [c] unchanged.
   Future<Contact> _withCreatedAt(Contact c) async {
-    if (c.createdAt != null) return c;
     final addr = c.publicosAddress;
     if (addr == null) return c;
     try {
@@ -1009,7 +1028,10 @@ class _ContactsPaneState extends State<ContactsPane> {
         addr,
         isOrg: c.isOrgAccount,
       );
-      return created != null ? c.copyWith(createdAt: created) : c;
+      if (created == null) return c;
+      final held = c.createdAt;
+      if (held != null && held.isAtSameMomentAs(created)) return c;
+      return c.copyWith(createdAt: created);
     } catch (_) {
       return c;
     }

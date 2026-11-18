@@ -34,9 +34,13 @@ class PostsList extends StatefulWidget {
   final String? displayName;
 
   /// Allow the compose FAB. The FAB itself lights only when the surface is a
-  /// single feed whose response says `posting_policy == open` (that means
-  /// it lights from the browser door too).
+  /// single feed this reader may post in (the server's `can_post`, else
+  /// `posting_policy == open`; from the browser door too).
   final bool showNewPostButton;
+
+  /// Told whenever the compose FAB appears or goes (see
+  /// [FeedPostSource.onComposeAvailable]).
+  final ValueChanged<bool>? onComposeAvailable;
 
   final Color? color;
 
@@ -101,6 +105,7 @@ class PostsList extends StatefulWidget {
     this.listId,
     this.displayName,
     this.showNewPostButton = true,
+    this.onComposeAvailable,
     this.color,
     this.titleTextSize,
     this.descriptionTextSize,
@@ -127,6 +132,7 @@ class _PostsListState extends State<PostsList> {
     listId: widget.listId,
     displayName: widget.displayName,
     showNewPostButton: widget.showNewPostButton,
+    onComposeAvailable: widget.onComposeAvailable,
     listHeader: widget.listHeader,
     onUnfollowGone: widget.onUnfollowGone,
   );
@@ -137,6 +143,7 @@ class _PostsListState extends State<PostsList> {
     _source
       ..displayName = widget.displayName
       ..showNewPostButton = widget.showNewPostButton
+      ..onComposeAvailable = widget.onComposeAvailable
       ..listHeader = widget.listHeader
       ..onUnfollowGone = widget.onUnfollowGone;
     // A changed roster patches the deck or reloads; an unchanged one is a

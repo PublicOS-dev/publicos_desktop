@@ -8751,6 +8751,18 @@ abstract class AppLocalizations {
   /// **'Layout and text'**
   String get feedsSettingsSheetGroupLayout;
 
+  /// No description provided for @feedsSettingsSheetGroupLanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Landing'**
+  String get feedsSettingsSheetGroupLanding;
+
+  /// No description provided for @feedsSettingsSheetLandingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Where Feeds opens.'**
+  String get feedsSettingsSheetLandingHint;
+
   /// No description provided for @feedsSettingsSheetGroupScrolling.
   ///
   /// In en, this message translates to:

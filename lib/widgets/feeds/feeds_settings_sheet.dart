@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:publicos_core/publicos_core.dart';
 
 import 'package:publicos_desktop/widgets/feeds/post_card.dart' show PostLayoutMode;
+import 'package:publicos_desktop/widgets/feeds/feed_favicon.dart';
+import 'package:publicos_desktop/widgets/feeds/feeds_navigation_drawer.dart'
+    show FeedsNavPrefs, FeedsView, exploreIcon, exploreViews;
 import 'package:publicos_desktop/widgets/feeds/translation_service.dart';
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 import 'package:publicos_desktop/widgets/post_signature_mark.dart'
@@ -134,6 +137,11 @@ class FeedsSettingsView extends StatefulWidget {
   final double bodySize;
   final int? trimChars;
   final PostLayoutMode layoutMode;
+
+  /// The Landing group's rows: the reader's lists in drawer order, and each
+  /// single list's feed (its name and icon).
+  final List<FeedList> lists;
+  final Map<int, ListFeed> singleFeedByListId;
   final ValueChanged<double> onTitleChanged;
   final ValueChanged<double> onBodyChanged;
   final ValueChanged<int?> onTrimChanged;
@@ -156,6 +164,8 @@ class FeedsSettingsView extends StatefulWidget {
     required this.bodySize,
     required this.trimChars,
     required this.layoutMode,
+    this.lists = const [],
+    this.singleFeedByListId = const {},
     required this.onTitleChanged,
     required this.onBodyChanged,
     required this.onTrimChanged,
@@ -202,6 +212,14 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
   /// The Settings page's accordion: one group open at a time, session-only.
   String? _openGroup = 'layout';
 
+  /// Where the Feeds tab lands, as stored ([FeedsNavPrefs.landing]).
+  String? _landingRaw;
+
+  void _setLanding(Object? target) {
+    setState(() => _landingRaw = FeedsNavPrefs.encodeLanding(target));
+    FeedsNavPrefs.setLanding(target);
+  }
+
   // Translation prefs (mobile-only section; hidden when !isSupported).
   bool _autoSignin = false;
   bool _translationsEnabled = true;
@@ -229,8 +247,10 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
       final sigShimmer = await SignatureShimmerPrefs.isEnabled();
       final sigSeconds = await SignatureShimmerPrefs.seconds();
       final doubleTap = await ReactionPrefs.doubleTapEmoji();
+      final landingRaw = await FeedsNavPrefs.landing();
       if (!mounted) return;
       setState(() {
+        _landingRaw = landingRaw;
         _autoSignin = autoSignin;
         _videoMb = videoMb;
         _videoAutoplay = videoAutoplay;
@@ -553,6 +573,20 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
                           ),
                       ],
                     ),
+                    _group(
+                      id: 'landing',
+                      icon: Icons.flag_outlined,
+                      title: context.l10n.feedsSettingsSheetGroupLanding,
+                      children: [
+                        _LandingList(
+                          lists: widget.lists,
+                          singleFeedByListId: widget.singleFeedByListId,
+                          selected: FeedsNavPrefs.resolveLanding(
+                              _landingRaw, widget.lists),
+                          onPick: _setLanding,
+                        ),
+                      ],
+                    ),
                     // No Scrolling group: the swipe snap is phone-only.
                     _group(
                       id: 'reactions',
@@ -662,6 +696,7 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
                             _translationWifiOnly = true;
                             _disabledSources = const <String>{};
                           });
+                          _setLanding(null);
                           _setVideoMb(35);
                           _setVideoAutoplay(true);
                           _saveTitle(_titleDefault);
@@ -1571,7 +1606,145 @@ class _TranslationSourceList extends StatelessWidget {
   }
 }
 
-/// The Settings page's group header, sheet copy (each screen
+/// The Landing group's picker: the three Explore rows, then the reader's
+/// lists in drawer order. Capped at five rows, scrolling inside;
+/// a check marks where the tab lands.
+class _LandingList extends StatelessWidget {
+  final List<FeedList> lists;
+  final Map<int, ListFeed> singleFeedByListId;
+
+  /// The effective landing ([FeedsNavPrefs.resolveLanding]).
+  final Object? selected;
+  final ValueChanged<Object> onPick;
+
+  const _LandingList({
+    required this.lists,
+    required this.singleFeedByListId,
+    required this.selected,
+    required this.onPick,
+  });
+
+  static const double _rowHeight = 44;
+  static const int _visibleRowsCap = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final l10n = context.l10n;
+    final sel = selected;
+    final targets = <Object>[...exploreViews, ...lists];
+
+    String label(Object t) {
+      if (t is FeedList) {
+        final feed = t.isSingle ? singleFeedByListId[t.id] : null;
+        if (feed == null) return t.name;
+        final title = feed.feedTitle;
+        return title != null && title.isNotEmpty
+            ? title
+            : (Uri.tryParse(feed.feedUrl)?.host ?? feed.feedUrl);
+      }
+      return switch (t) {
+        FeedsView.hotFeeds => l10n.exploreHotFeeds,
+        FeedsView.latest => l10n.exploreLatestPosts,
+        _ => l10n.exploreHotPosts,
+      };
+    }
+
+    Widget leading(Object t) {
+      if (t is FeedsView) {
+        return Icon(exploreIcon(t), size: 18, color: tokens.connectedAccent);
+      }
+      final list = t as FeedList;
+      final feed = list.isSingle ? singleFeedByListId[list.id] : null;
+      if (feed != null) return FeedFavicon(feedUrl: feed.feedUrl, size: 22);
+      final emoji = list.icon;
+      return emoji != null && emoji.isNotEmpty
+          ? Text(emoji, style: const TextStyle(fontSize: 16))
+          : Icon(Icons.list_alt_rounded, size: 18, color: tokens.starkWhite);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.feedsSettingsSheetLandingHint,
+            style: TextStyle(color: tokens.textDim, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: tokens.surfaceElevated,
+              border: Border.all(color: tokens.borderSubtle, width: 1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            constraints: const BoxConstraints(
+              // +4 for the separators between five rows.
+              maxHeight: _rowHeight * _visibleRowsCap + 4,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: targets.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: tokens.borderSubtle.withValues(alpha: 0.4),
+                ),
+                itemBuilder: (_, i) {
+                  final t = targets[i];
+                  final on = t is FeedList
+                      ? sel is FeedList && sel.id == t.id
+                      : sel == t;
+                  return InkWell(
+                    onTap: () => onPick(t),
+                    child: SizedBox(
+                      height: _rowHeight,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              child: Center(child: leading(t)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                label(t),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: tokens.starkWhite,
+                                  fontSize: 13.5,
+                                  fontWeight:
+                                      on ? FontWeight.w700 : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (on)
+                              Icon(Icons.check_rounded,
+                                  size: 18, color: tokens.starkWhite),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Settings page's group header, sheet copy (styling guide: each screen
 /// keeps its own private `_GroupHeader`). Grey glyph + title + a chevron that
 /// turns 90° when open; the open group gets a light `glassFill` wash.
 class _GroupHeader extends StatelessWidget {

@@ -60,6 +60,91 @@ class ExploreSectionPrefs {
   }
 }
 
+/// The reader's own arrangement of the Feeds drawer, on this device:
+/// the order of the LISTS rows (hold a row and drag) and
+/// the view the tab lands on (Reading settings → Landing). Read fresh each
+/// time, never cached: list ids belong to one session.
+class FeedsNavPrefs {
+  FeedsNavPrefs._();
+
+  /// CSV of list ids, top to bottom.
+  static const String kOrderKey = 'feeds_list_order';
+
+  /// `hotPosts` | `hotFeeds` | `latest` | `list:<id>`; empty = never chosen.
+  static const String kLandingKey = 'feeds_landing';
+
+  static Future<String?> _read(String key) async {
+    try {
+      final v = (await PublicOSSettings.getSetting(key))?.value;
+      return v == null || v.isEmpty ? null : v;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _write(String key, String value) async {
+    try {
+      await PublicOSSettings.setSetting(
+        key,
+        Record.asSettings(key: key, value: value, isSystem: true),
+      );
+    } catch (_) {}
+  }
+
+  static Future<List<int>> listOrder() async {
+    final raw = await _read(kOrderKey);
+    if (raw == null) return const [];
+    return raw.split(',').map(int.tryParse).whereType<int>().toList();
+  }
+
+  static Future<void> setListOrder(List<FeedList> lists) =>
+      _write(kOrderKey, lists.map((l) => l.id).join(','));
+
+  /// [lists] in the saved [order]; a list the order does not know (made
+  /// since) keeps its place after them.
+  static List<FeedList> applyOrder(List<FeedList> lists, List<int> order) {
+    if (order.isEmpty) return lists;
+    final byId = {for (final l in lists) l.id: l};
+    final known = order.toSet();
+    return [
+      for (final id in order)
+        if (byId[id] != null) byId[id]!,
+      ...lists.where((l) => !known.contains(l.id)),
+    ];
+  }
+
+  /// The stored landing, raw (see [resolveLanding]).
+  static Future<String?> landing() => _read(kLandingKey);
+
+  /// [target] is an Explore [FeedsView], a [FeedList], or null to clear.
+  static Future<void> setLanding(Object? target) =>
+      _write(kLandingKey, encodeLanding(target) ?? '');
+
+  static String? encodeLanding(Object? target) => switch (target) {
+        FeedList l => 'list:${l.id}',
+        FeedsView v when exploreViews.contains(v) => v.name,
+        _ => null,
+      };
+
+  /// Where the tab lands: never chosen = the first list; a chosen list that
+  /// no longer exists = Latest posts.
+  static Object? resolveLanding(String? raw, List<FeedList> lists) {
+    if (raw != null) {
+      for (final v in exploreViews) {
+        if (v.name == raw) return v;
+      }
+      if (raw.startsWith('list:')) {
+        final id = int.tryParse(raw.substring(5));
+        for (final l in lists) {
+          if (l.id == id) return l;
+        }
+        return FeedsView.latest;
+      }
+    }
+    return lists.isNotEmpty ? lists.first : null;
+  }
+}
+
 /// JSON-feed URL for [channel], or null if we can't synthesize it. Must
 /// match the shape used by `RssFeedsViewState._channelJsonUrl` and by
 /// `ManageServerPage._channelJsonUrl` so equality on stored router
@@ -100,6 +185,10 @@ class FeedsNavigationDrawer extends StatelessWidget {
   /// nothing to close).
   final VoidCallback? onClose;
   final ValueChanged<FeedList>? onEditList;
+
+  /// The LISTS rows were dragged into a new order (hold a row, then drag).
+  /// With this set, a hold released in place is what opens [onEditList].
+  final ValueChanged<List<FeedList>>? onListsReordered;
   final VoidCallback? onCreateChannel;
   final VoidCallback? onSettings;
   final VoidCallback? onManageServer;
@@ -140,6 +229,7 @@ class FeedsNavigationDrawer extends StatelessWidget {
     required this.onManageLists,
     this.onClose,
     this.onEditList,
+    this.onListsReordered,
     this.onCreateChannel,
     this.onSettings,
     this.onManageServer,
@@ -222,39 +312,15 @@ class FeedsNavigationDrawer extends StatelessWidget {
                       ),
                     )
                   else
-                    ...lists.map((list) {
-                      // A list row is selected iff the single selection IS
-                      // this list — no sibling-flag bookkeeping, the model
-                      // makes "list selected" and "Discover active" mutually
-                      // exclusive by construction.
-                      final isSelected = sel is FeedList && sel.id == list.id;
-                      if (list.isSingle &&
-                          singleFeedByListId.containsKey(list.id)) {
-                        final feed = singleFeedByListId[list.id]!;
-                        final foundAt = feed.feedFoundAtAccountAddress != null
-                            ? resolvedContacts[feed.feedFoundAtAccountAddress!]
-                            : null;
-                        return _SingleListRow(
-                          list: list,
-                          feed: feed,
-                          foundAt: foundAt,
-                          selected: isSelected,
-                          onTap: () => onListSelected(list),
-                          onLongPress: onEditList == null
-                              ? null
-                              : () => onEditList!(list),
-                        );
-                      }
-                      return _ListRow(
-                        emoji: list.icon,
-                        label: list.name,
-                        selected: isSelected,
-                        onTap: () => onListSelected(list),
-                        onLongPress: onEditList == null
-                            ? null
-                            : () => onEditList!(list),
-                      );
-                    }),
+                    _ListsSection(
+                      lists: lists,
+                      selected: sel,
+                      singleFeedByListId: singleFeedByListId,
+                      resolvedContacts: resolvedContacts,
+                      onListSelected: onListSelected,
+                      onEditList: onEditList,
+                      onReordered: onListsReordered,
+                    ),
                   const SizedBox(height: 14),
                   _SectionHeader(
                     label: context.l10n.feedsNavigationDrawerSectionMyChannels,
@@ -434,6 +500,117 @@ class _ExploreSectionState extends State<_ExploreSection> {
         ),
         const SizedBox(height: 6),
       ],
+    );
+  }
+}
+
+/// The LISTS rows. Hold a row and drag to reorder; a hold
+/// released where it started opens the list's edit sheet, which the hold
+/// alone did before. Keeps its own copy of the order so the drop paints at
+/// once, whatever the host's rebuild timing.
+class _ListsSection extends StatefulWidget {
+  final List<FeedList> lists;
+  final Object? selected;
+  final Map<int, ListFeed> singleFeedByListId;
+  final Map<String, Contact> resolvedContacts;
+  final ValueChanged<FeedList> onListSelected;
+  final ValueChanged<FeedList>? onEditList;
+  final ValueChanged<List<FeedList>>? onReordered;
+
+  const _ListsSection({
+    required this.lists,
+    required this.selected,
+    required this.singleFeedByListId,
+    required this.resolvedContacts,
+    required this.onListSelected,
+    this.onEditList,
+    this.onReordered,
+  });
+
+  @override
+  State<_ListsSection> createState() => _ListsSectionState();
+}
+
+class _ListsSectionState extends State<_ListsSection> {
+  late List<FeedList> _order = List.of(widget.lists);
+  int? _dragFrom;
+
+  @override
+  void didUpdateWidget(_ListsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _order = List.of(widget.lists);
+  }
+
+  Widget _row(FeedList list) {
+    final sel = widget.selected;
+    // A list row is selected iff the single selection IS this list — no
+    // sibling-flag bookkeeping, the model makes "list selected" and
+    // "Discover active" mutually exclusive by construction.
+    final isSelected = sel is FeedList && sel.id == list.id;
+    // The drag owns the hold while reordering is on (two long-press
+    // recognizers on one row would fight); see onReorderEnd.
+    final onLongPress = widget.onReordered == null && widget.onEditList != null
+        ? () => widget.onEditList!(list)
+        : null;
+    final feed = list.isSingle ? widget.singleFeedByListId[list.id] : null;
+    if (feed != null) {
+      final foundAt = feed.feedFoundAtAccountAddress != null
+          ? widget.resolvedContacts[feed.feedFoundAtAccountAddress!]
+          : null;
+      return _SingleListRow(
+        list: list,
+        feed: feed,
+        foundAt: foundAt,
+        selected: isSelected,
+        onTap: () => widget.onListSelected(list),
+        onLongPress: onLongPress,
+      );
+    }
+    return _ListRow(
+      emoji: list.icon,
+      label: list.name,
+      selected: isSelected,
+      onTap: () => widget.onListSelected(list),
+      onLongPress: onLongPress,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final canReorder = widget.onReordered != null;
+    return ReorderableListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      buildDefaultDragHandles: false,
+      itemCount: _order.length,
+      proxyDecorator: (child, _, __) =>
+          Material(color: tokens.surfaceElevated, child: child),
+      onReorderStart: (i) => _dragFrom = i,
+      onReorderEnd: (i) {
+        final from = _dragFrom;
+        _dragFrom = null;
+        // Dropped where it was picked up (the slot above or below itself).
+        if (from != null && (i == from || i == from + 1)) {
+          widget.onEditList?.call(_order[from]);
+        }
+      },
+      onReorder: (oldIndex, newIndex) {
+        if (newIndex > oldIndex) newIndex--;
+        if (newIndex == oldIndex) return;
+        setState(() => _order.insert(newIndex, _order.removeAt(oldIndex)));
+        widget.onReordered?.call(List.of(_order));
+      },
+      itemBuilder: (context, i) {
+        final list = _order[i];
+        return ReorderableDelayedDragStartListener(
+          key: ValueKey(list.id),
+          index: i,
+          enabled: canReorder,
+          child: _row(list),
+        );
+      },
     );
   }
 }

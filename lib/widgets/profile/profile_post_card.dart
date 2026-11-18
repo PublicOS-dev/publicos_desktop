@@ -6,8 +6,8 @@ import 'package:publicos_core/publicos_core.dart';
 import 'package:zero_cached_image/zero_cached_image.dart';
 import 'package:zero_cached_thumbnail/zero_cached_thumbnail.dart';
 import 'package:publicos_desktop/widgets/shimmer_box.dart';
-import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 import 'package:publicos_desktop/widgets/feeds/go_to_feed.dart';
+import 'package:publicos_desktop/widgets/feeds/post_card.dart';
 import 'package:publicos_desktop/widgets/feeds/post_detail_page.dart';
 import 'package:publicos_desktop/widgets/profile/content_card.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
@@ -174,6 +174,29 @@ class _ProfilePostCardState extends State<ProfilePostCard>
   _PostCardState _state = _PostCardState.loading;
   Contact? _author;
 
+  /// The feed's name, for the "on account/feed" line and the opened post's
+  /// header. The single-post read carries none, so it is
+  /// looked up beside it.
+  static final Map<String, String> _feedTitles = {};
+  String? _feedTitle;
+
+  String get _feedKey => '${widget.url}|${widget.feedLink ?? ''}';
+
+  void _resolveFeed() {
+    final key = _feedKey;
+    _feedTitle = _feedTitles[key];
+    if (_feedTitle == null) _loadFeedTitle(key);
+  }
+
+  Future<void> _loadFeedTitle(String key) async {
+    try {
+      final title = await feedTitleFor(widget.url, widget.feedLink);
+      if (title == null) return;
+      _feedTitles[key] = title;
+      if (mounted && key == _feedKey) setState(() => _feedTitle = title);
+    } catch (_) {}
+  }
+
   final ScrollController _scroll = ScrollController();
 
   /// Whether the post is taller than the card. Only then does the card
@@ -201,6 +224,7 @@ class _ProfilePostCardState extends State<ProfilePostCard>
   void initState() {
     super.initState();
     _load();
+    _resolveFeed();
   }
 
   @override
@@ -212,6 +236,9 @@ class _ProfilePostCardState extends State<ProfilePostCard>
       _authorGrace?.cancel();
       _authorGrace = null;
       _load();
+    }
+    if (old.url != widget.url || old.feedLink != widget.feedLink) {
+      _resolveFeed();
     }
   }
 
@@ -299,13 +326,20 @@ class _ProfilePostCardState extends State<ProfilePostCard>
     _settleAuthor();
   }
 
+  /// The post as the post card and the detail page read it: the pin's
+  /// found-via + tab key, the derived feed URL and the feed's name.
+  Post _stamped(Post post) =>
+      withFeedLink(post, widget.feedLink).copyWith(feedTitle: _feedTitle);
+
   void _open() {
     final loaded = _post;
     if (loaded == null) {
       if (_state == _PostCardState.failed) _load(force: true);
       return;
     }
-    final post = withFeedLink(loaded, widget.feedLink);
+    // The feed's name too, so the page's header reads as it does for a post
+    // tapped from the feed.
+    final post = _stamped(loaded);
     final addr = post.postAuthorAddress;
     final contacts = <String, Contact>{
       if (addr != null && _author != null) addr: _author!,
@@ -349,27 +383,6 @@ class _ProfilePostCardState extends State<ProfilePostCard>
       if (m.isRenderableMedia) add(m);
     }
     return out;
-  }
-
-  /// `"emoji:count,emoji:count"` (Core's `Post.reactions`) → the total.
-  static int _reactionTotal(String? reactions) {
-    if (reactions == null || reactions.isEmpty) return 0;
-    var total = 0;
-    for (final part in reactions.split(',')) {
-      final i = part.lastIndexOf(':');
-      if (i < 0) continue;
-      total += int.tryParse(part.substring(i + 1).trim()) ?? 0;
-    }
-    return total;
-  }
-
-  String _authorLabel(Post post) {
-    final name = _author?.publicosDisplayName ?? _author?.displayName;
-    if (name != null && name.isNotEmpty) return name;
-    final addr = post.postAuthorAddress ?? post.channelOwnerAddress ?? '';
-    return addr.length > 10
-        ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}'
-        : addr;
   }
 
   /// Whether the owner gave the card a background of its own.
@@ -514,9 +527,10 @@ class _ProfilePostCardState extends State<ProfilePostCard>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  bar(22, 22, r: 22 * 0.40),
-                  const SizedBox(width: 6),
-                  bar(10, 90),
+                  bar(PostCard.avatarSize, PostCard.avatarSize,
+                      r: PostCard.avatarSize * 0.40),
+                  const SizedBox(width: PostCard.gutter),
+                  bar(13, 110),
                 ]),
                 const SizedBox(height: 8),
                 Expanded(
@@ -620,23 +634,9 @@ class _ProfilePostCardState extends State<ProfilePostCard>
     // Body text sits 3/4 of the way from the dim tone to the title's (the dim
     // tone alone reads too dark); the title stays brighter.
     final bodyColor = Color.lerp(dim, fg, 0.75)!;
+    final stamped = _stamped(post);
+    final authorAddr = post.postAuthorAddress;
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkOverflow());
-
-    final counters = <Widget>[
-      if (widget.cells >= 3) ...[
-        _Counter(
-            icon: Icons.emoji_emotions_outlined,
-            value: _reactionTotal(post.reactions),
-            color: dim),
-        _Counter(
-            icon: Icons.chat_bubble_outline_rounded,
-            value: post.commentsCount ?? 0,
-            color: dim),
-      ],
-      if (widget.cells >= 2 && media.isNotEmpty)
-        _Counter(
-            icon: Icons.perm_media_outlined, value: media.length, color: dim),
-    ];
 
     return Stack(
       fit: StackFit.expand,
@@ -645,105 +645,77 @@ class _ProfilePostCardState extends State<ProfilePostCard>
         if (showMedia) _mediaLayer(media.first),
         Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+          // The post card's OWN header row and action row, on its state (the
+          // icon, the name, the "on account/feed" line, the reaction button
+          // and its sheets), laid around this card's text. Dead in edit mode and in
+          // a preview, where the taps belong to the grid.
+          child: IgnorePointer(
+            ignoring: !widget.interactive,
+            child: PostCard(
+              post: stamped,
+              theme: Theme.of(context),
+              resolvedContacts: {
+                if (authorAddr != null && _author != null)
+                  authorAddr: _author!,
+              },
+              // The line shows when the pin carries where it was found.
+              showFeedContext: feedTabOf(widget.feedLink) != null,
+              partsTokens: onColor ? GlassTokens.dark : null,
+              partsBuilder: (context, header, actions) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GlassContactIcon(
-                    contact: _author,
-                    address: post.postAuthorAddress,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _authorLabel(post),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: fg,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Icon(Icons.push_pin_rounded, size: 13, color: dim),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: _scroll,
-                  // Scroll only a post that overflows, and never in edit mode
-                  // or a preview (where the drag belongs to the grid).
-                  physics: widget.interactive && _overflows
-                      ? const ClampingScrollPhysics()
-                      : const NeverScrollableScrollPhysics(),
-                  child: Column(
-                    key: _textKey,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Stack(
                     children: [
-                      if (title.isNotEmpty) ...[
-                        Text(
-                          title,
-                          style: TextStyle(
-                              color: fg,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 3),
-                      ],
-                      if (body.isNotEmpty)
-                        Text(
-                          body,
-                          style: TextStyle(
-                              color: bodyColor, fontSize: 12, height: 1.35),
-                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 18),
+                        child: header,
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 0,
+                        child: Icon(Icons.push_pin_rounded,
+                            size: 13, color: dim),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              if (counters.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                // Space-between: two counters sit at the edges, three at
-                // left / centre / right. A lone counter stays bottom-right.
-                counters.length == 1
-                    ? Align(alignment: Alignment.centerRight, child: counters.first)
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: counters,
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _scroll,
+                        // Scroll only a post that overflows, and never in edit mode
+                        // or a preview (where the drag belongs to the grid).
+                        physics: widget.interactive && _overflows
+                            ? const ClampingScrollPhysics()
+                            : const NeverScrollableScrollPhysics(),
+                        child: Column(
+                          key: _textKey,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (title.isNotEmpty) ...[
+                              Text(
+                                title,
+                                style: TextStyle(
+                                    color: fg,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 3),
+                            ],
+                            if (body.isNotEmpty)
+                              Text(
+                                body,
+                                style: TextStyle(
+                                    color: bodyColor, fontSize: 12, height: 1.35),
+                              ),
+                          ],
+                        ),
                       ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A mini counter on a post card: glyph + number.
-class _Counter extends StatelessWidget {
-  final IconData icon;
-  final int value;
-  final Color color;
-
-  const _Counter({required this.icon, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 4),
-        Text(
-          '$value',
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    const SizedBox(height: 6),
+                    actions,
+                ],
+              ),
+            ),
           ),
         ),
       ],

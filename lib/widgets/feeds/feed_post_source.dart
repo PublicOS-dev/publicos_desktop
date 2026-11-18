@@ -71,9 +71,15 @@ class FeedPostSource extends PostSource {
   String? displayName;
 
   /// Allow the compose FAB. The FAB itself lights only when the surface is a
-  /// single feed whose response says `posting_policy == open` (so it lights
-  /// from the browser door too).
+  /// single feed THIS reader may post in: the server's per-reader `can_post`
+  /// when it answered (signed reads), else `posting_policy == open` (it
+  /// lights from the browser door too). An `approved`
+  /// channel the reader is on the posters list of lights it as well.
   bool showNewPostButton;
+
+  /// Told whenever the compose FAB appears or goes, so a host with its own
+  /// post button can step aside while this one shows.
+  ValueChanged<bool>? onComposeAvailable;
 
   /// A list's header: who the list follows, opening "Manage
   /// [list]". Built by the host, it takes the channel description's slot, so
@@ -93,6 +99,7 @@ class FeedPostSource extends PostSource {
     this.showNewPostButton = true,
     this.listHeader,
     this.onUnfollowGone,
+    this.onComposeAvailable,
   });
 
   List<Post> _posts = [];
@@ -153,6 +160,9 @@ class FeedPostSource extends PostSource {
   String? _language;
   ChannelStats? _stats;
   String? _postingPolicy;
+  // The server's per-reader "you may post here" (`channel.can_post`, signed
+  // interactions only). Null = not asked; then the policy decides.
+  bool? _canPost;
   // `_publicos.is_private` from the fetch result — the composer routes media
   // uploads by it (private channel ⇒ pedia door). Response-derived, never
   // from the URL shape.
@@ -198,7 +208,8 @@ class FeedPostSource extends PostSource {
 
   /// Forum-ness comes from the fetch result (`_publicos.posting_policy`),
   /// never from the URL shape or the first post.
-  bool get _isForum => _postingPolicy == 'open';
+  bool get _isForum =>
+      _postingPolicy == 'open' || _postingPolicy == 'approved';
 
   bool get _showSortBar => _isForum && _isSingleSurface;
 
@@ -408,6 +419,7 @@ class FeedPostSource extends PostSource {
     _language = null;
     _stats = null;
     _postingPolicy = null;
+    _canPost = null;
     _channelIsPrivate = null;
     changed();
 
@@ -517,6 +529,8 @@ class FeedPostSource extends PostSource {
     _language = r.language;
     _stats = r.stats;
     _postingPolicy = r.postingPolicy;
+    // Per reader, never cached: keep the last answer through a cache paint.
+    _canPost = r.canPost ?? _canPost;
     _channelIsPrivate = r.isPrivate;
     _hasMore = r.hasMore;
     _gateChannel = r.channel;
@@ -912,13 +926,28 @@ class FeedPostSource extends PostSource {
     );
   }
 
+  /// Whether this reader may post into the single feed on screen: the
+  /// server's own answer when it gave one, else "anyone may" (`open`).
+  bool get _readerMayPost =>
+      _isSingleSurface &&
+      _composeTarget?.ownerAddress != null &&
+      (_canPost ?? _postingPolicy == 'open');
+
+  bool? _lastComposeReported;
+
   @override
   Widget? floatingAction(BuildContext context) {
-    // Compose lights when the DATA says the channel takes posts from anyone
-    // (posting_policy == open) — which means it lights from the browser door
-    // too. The host can suppress it via showNewPostButton.
-    final canCompose =
-        showNewPostButton && _isForum && _composeTarget?.ownerAddress != null;
+    // Compose lights when the DATA says this reader may post here — any
+    // door. The host can suppress it via showNewPostButton.
+    final canCompose = showNewPostButton && _readerMayPost;
+    if (_lastComposeReported != canCompose && onComposeAvailable != null) {
+      _lastComposeReported = canCompose;
+      final cb = onComposeAvailable!;
+      // Reported after the frame: this runs inside build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isDisposed) cb(canCompose);
+      });
+    }
     if (!canCompose) return null;
     final tokens = GlassTokens.of(context);
     return FloatingActionButton(

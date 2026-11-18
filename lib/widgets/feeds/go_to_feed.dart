@@ -65,6 +65,51 @@ bool _sameChannel(String a, String b) {
   return tail(ba) == tail(bb);
 }
 
+/// The tab a pin's [feedLink] names: the found-via account and the tab key,
+/// or null when the pin carries none.
+({String address, String key})? feedTabOf(String? feedLink) {
+  final link = feedLink == null ? null : parse(feedLink);
+  if (link == null ||
+      link.kind != DeepLinkKind.publicosAddress ||
+      link.type != DeepLinkTarget.tab ||
+      link.key == null) {
+    return null;
+  }
+  return (address: link.identifier, key: link.key!);
+}
+
+/// The feed name for a post read from its permalink alone (a pinned card):
+/// the single-post read carries none, so the detail page's header fell back
+/// to `#slug`. The found-via tab's name when the pin's tab still lists this
+/// channel (what a tap from that tab shows), else the channel's own name.
+/// Null when neither answers.
+Future<String?> feedTitleFor(String postUrl, String? feedLink) async {
+  final ref = postRefOf(postUrl);
+  if (ref == null) return null;
+  final tab = feedTabOf(feedLink);
+  if (tab != null) {
+    try {
+      final record = await PublicOSContacts.getRecord(
+          tab.key, EthereumAddress.fromHex(tab.address));
+      final name = (record?.metadata['name'] as String?)?.trim();
+      if (record != null &&
+          record.routerSubtype == RouterSubtype.channel &&
+          _sameChannel(record.value, postUrl) &&
+          name != null &&
+          name.isNotEmpty) {
+        return name;
+      }
+    } catch (_) {}
+  }
+  final resp = await PublicOSChannels.getChannel(
+    ownerAddress: ref.owner,
+    slug: ref.slug,
+    serverAddress: ref.server,
+  );
+  final name = resp.data?.name.trim();
+  return name == null || name.isEmpty ? null : name;
+}
+
 Future<void> goToFeed(BuildContext context, Post post) async {
   final feedUrl = feedUrlOf(post);
   if (feedUrl == null) return;

@@ -5194,6 +5194,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get feedsSettingsSheetGroupLayout => 'Diseño y texto';
 
   @override
+  String get feedsSettingsSheetGroupLanding => 'Al abrir';
+
+  @override
+  String get feedsSettingsSheetLandingHint => 'Lo que ves al abrir Feeds.';
+
+  @override
   String get feedsSettingsSheetGroupScrolling => 'Desplazamiento';
 
   @override

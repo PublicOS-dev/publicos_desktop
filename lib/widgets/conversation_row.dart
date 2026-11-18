@@ -294,6 +294,32 @@ class _ConversationRowState extends State<ConversationRow> {
     );
   }
 
+  /// Unread count: a monochrome rounded square on the preview line, bottom
+  /// right, so the time keeps the top-right corner on every row. 16px tall,
+  /// under the preview's line height, so an unread row is no taller.
+  Widget _buildUnreadBadge(GlassTokens tokens) {
+    return Container(
+      height: 16,
+      constraints: const BoxConstraints(minWidth: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tokens.starkWhite,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        widget.unreadCount > 99 ? '99+' : '${widget.unreadCount}',
+        style: TextStyle(
+          fontFamily: 'SpaceGrotesk',
+          color: tokens.background,
+          fontSize: 10,
+          height: 1.0,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = GlassTokens.of(context);
@@ -356,42 +382,19 @@ class _ConversationRowState extends State<ConversationRow> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildStatusIndicator(tokens),
-                                    if (widget.unreadCount > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: tokens.connectedAccent,
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          widget.unreadCount > 99
-                                              ? '99+'
-                                              : '${widget.unreadCount}',
-                                          style: TextStyle(
-                                            fontFamily: 'SpaceGrotesk',
-                                            color: tokens.background,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                _buildStatusIndicator(tokens),
                               ],
                             ),
                             const SizedBox(height: 4),
-                            _buildPreviewText(tokens),
+                            Row(
+                              children: [
+                                Expanded(child: _buildPreviewText(tokens)),
+                                if (widget.unreadCount > 0) ...[
+                                  const SizedBox(width: 8),
+                                  _buildUnreadBadge(tokens),
+                                ],
+                              ],
+                            ),
                             if (widget.isNew &&
                                 widget.contact.publicosDisplayName != null) ...[
                               const SizedBox(height: 4),

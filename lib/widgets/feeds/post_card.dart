@@ -181,6 +181,18 @@ class PostCard extends StatefulWidget {
   final int initialHeroPage;
   final VideoHandoff? videoHandoff;
 
+  /// Hands this card's OWN header row and action row to a host that lays
+  /// them out around its own content (the pinned post card on a profile). They are the
+  /// same widgets on this card's state, so the icon, the name, the "on
+  /// account/feed" line, the reaction button and its sheets are the feed's.
+  /// The header comes with no actions and no outer padding; the host insets.
+  final Widget Function(BuildContext context, Widget header, Widget actions)?
+      partsBuilder;
+
+  /// The tokens the parts are built on; null = the theme's. A host that
+  /// paints them over a picture or a colour passes the dark set.
+  final GlassTokens? partsTokens;
+
   const PostCard({
     super.key,
     required this.post,
@@ -209,6 +221,8 @@ class PostCard extends StatefulWidget {
     this.awaitingContacts = false,
     this.initialHeroPage = 0,
     this.videoHandoff,
+    this.partsBuilder,
+    this.partsTokens,
   });
 
   @override
@@ -757,6 +771,16 @@ class _PostCardState extends State<PostCard>
   Widget _buildPostCard(BuildContext context) {
     final post = widget.post;
     final theme = widget.theme;
+    final parts = widget.partsBuilder;
+    if (parts != null) {
+      final partsTokens = widget.partsTokens ?? GlassTokens.of(context);
+      return parts(
+        context,
+        _buildHeaderRow(context, post, theme, partsTokens,
+            actions: false, padding: EdgeInsets.zero),
+        _buildActionRow(post, theme, partsTokens),
+      );
+    }
     final tokens = GlassTokens.of(context);
     final isWide = widget.layoutMode == PostLayoutMode.wide;
     final titleTextSize = widget.titleTextSize;
@@ -1297,9 +1321,10 @@ class _PostCardState extends State<PostCard>
     GlassTokens tokens, {
     bool menuInRow = true,
     bool actions = true,
+    EdgeInsets padding = const EdgeInsets.fromLTRB(_hPad, 14, _hPadRight, 0),
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(_hPad, 14, _hPadRight, 0),
+      padding: padding,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

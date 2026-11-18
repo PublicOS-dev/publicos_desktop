@@ -817,6 +817,8 @@ class _AppShellState extends State<AppShell> {
   static const List<(String, String)> _defaultFollows = [
     (_publicosOrgName, _publicosOnboardedFlag),
     ('jmsl', 'jmsl_default_follow'),
+    // TheOrg lists the channels its members run (Diez Palomas, Backstage).
+    ('TheOrg', 'theorg_default_follow'),
   ];
 
   Future<void> _ensureDefaultFollow(String name, String flag) async {

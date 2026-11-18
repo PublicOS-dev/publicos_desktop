@@ -961,7 +961,16 @@ class FeedsPaneState extends State<FeedsPane> {
 
     try {
       final fetchedLists = await PublicOSFeedLists.getUserLists();
-      final lists = _sortDefaultFirst(await _ensureDefaultList(fetchedLists));
+      // The reader's own drawer order wins over default-first once they have
+      // dragged a row (FeedsNavPrefs; a local settings read).
+      final lists = FeedsNavPrefs.applyOrder(
+        _sortDefaultFirst(await _ensureDefaultList(fetchedLists)),
+        await FeedsNavPrefs.listOrder(),
+      );
+      // Only a true cold start reads where to land (Reading settings →
+      // Landing).
+      final landingRaw =
+          _selected == null ? await FeedsNavPrefs.landing() : null;
 
       if (!mounted) return;
 
@@ -991,8 +1000,16 @@ class FeedsPaneState extends State<FeedsPane> {
       // seeding the ACCOUNT rather than channel snapshots, is the normal state
       // of a healthy Following list. An empty list is a fine place to land, so
       // there is nothing to detect and nowhere to bounce to.
-      final Object? initialSelection =
-          needsInitialSelect && lists.isNotEmpty ? lists.first : null;
+      //
+      // A cold start lands where the reader chose
+      // (`resolveLanding`: never chosen = the first list, a chosen list that
+      // is gone = Latest posts). A list deleted while open still lands on the
+      // first list.
+      final Object? initialSelection = !needsInitialSelect
+          ? null
+          : _selected == null
+              ? FeedsNavPrefs.resolveLanding(landingRaw, lists)
+              : (lists.isNotEmpty ? lists.first : null);
 
       // Fallback server base for channels that carry no serverAddress —
       // needed to build a channel pick's feed url. Local DB read.
@@ -1303,6 +1320,8 @@ class FeedsPaneState extends State<FeedsPane> {
         bodySize: _descriptionTextSize,
         trimChars: _trimChars,
         layoutMode: _layoutMode,
+        lists: _lists,
+        singleFeedByListId: _singleFeedByListId,
         onTitleChanged: (size) => setState(() => _titleTextSize = size),
         onBodyChanged: (size) => setState(() => _descriptionTextSize = size),
         onTrimChanged: (chars) => setState(() => _trimChars = chars),
@@ -1383,6 +1402,12 @@ class FeedsPaneState extends State<FeedsPane> {
       // cleaner than relying on didUpdateWidget when bookmarks toggle vs.
       // list/channel switches.
       key: ValueKey(_sourceKey),
+      // The list's own "+" posts INTO the feed on screen and lights only
+      // where the server says this reader may post. On our own feed-style
+      // channels the pane's post button is the one, so it stays off there
+      // (same rule as the client's Feeds tab).
+      showNewPostButton:
+          _selectedChannel == null || _selectedChannel!.isOpen,
       feeds: roster,
       listId: _rosterListId,
       displayName: _selectedItemName,
@@ -1460,6 +1485,10 @@ class FeedsPaneState extends State<FeedsPane> {
             onRemoveFromTab: _removeChannelFromTab,
             // No onClose: the pane is permanent, so the drawer shows no X
             // (the client passes _closeDrawer).
+            onListsReordered: (lists) {
+              setState(() => _lists = lists);
+              FeedsNavPrefs.setListOrder(lists);
+            },
             onEditList: (list) {
               // EVERY list is editable now. The old guard existed to protect a
               // permanent "Following" whose name carried behavior; nothing

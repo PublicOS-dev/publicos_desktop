@@ -148,11 +148,15 @@ class _MessagesPaneState extends State<MessagesPane> {
     try {
       final fetched = await PublicOSContacts.fetchContact(addr);
       if (!mounted || g != _selectGen) return;
-      // fetchContact never resolves createdAt: keep the one we already hold,
-      // else look it up once (the "Joined" row on the profile).
+      // The "Joined" row: keep the date we already hold on screen, and let
+      // the chain read replace it only if it comes back different.
       final fresh = await _withCreatedAt(
         fetched.copyWith(createdAt: _selected?.createdAt),
       );
+      if (!mounted || g != _selectGen) return;
+      // Stored, as contacts_pane does: without this a profile only ever
+      // opened from Messages never kept its date and showed blank each visit.
+      await PublicOSContacts.saveContact(fresh);
       if (!mounted || g != _selectGen) return;
       setState(() => _selected = fresh);
     } catch (_) {
@@ -163,11 +167,11 @@ class _MessagesPaneState extends State<MessagesPane> {
   }
 
   /// Port of publicos_client `browser.dart` `_withCreatedAt`: returns [c] with
-  /// `Contact.createdAt` filled from chain when it was null — an immutable
-  /// value, fetched once and never refetched. Pure: no setState, no save.
-  /// Failures return [c] unchanged (future visits retry).
+  /// `Contact.createdAt` read from chain. The stored value is what the profile
+  /// shows while this runs; it is replaced only when the chain answers with a
+  /// different date. Pure: no setState, no save. A failed or empty read
+  /// returns [c] unchanged.
   Future<Contact> _withCreatedAt(Contact c) async {
-    if (c.createdAt != null) return c;
     final addr = c.publicosAddress;
     if (addr == null) return c;
     try {
@@ -175,7 +179,10 @@ class _MessagesPaneState extends State<MessagesPane> {
         addr,
         isOrg: c.isOrgAccount,
       );
-      return created != null ? c.copyWith(createdAt: created) : c;
+      if (created == null) return c;
+      final held = c.createdAt;
+      if (held != null && held.isAtSameMomentAs(created)) return c;
+      return c.copyWith(createdAt: created);
     } catch (_) {
       return c;
     }
