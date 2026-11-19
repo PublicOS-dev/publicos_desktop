@@ -212,27 +212,10 @@ class _CreateChannelPageState extends State<CreateChannelPage> {
           padding: const EdgeInsets.only(bottom: 32),
           children: [
             _SectionHeader(label: l10n.createChannelPageSectionIdentity),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-              child: TextField(
-                controller: _nameCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                style: TextStyle(
-                  color: tokens.starkWhite,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-                decoration: InputDecoration(
-                  hintText: l10n.createChannelPageNameHint,
-                  hintStyle: TextStyle(
-                    color: tokens.textDim,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                ),
-              ),
+            _LabeledField(
+              label: l10n.createChannelPageNameHint.toUpperCase(),
+              controller: _nameCtrl,
+              textCapitalization: TextCapitalization.sentences,
             ),
             _LabeledField(
               label: l10n.createChannelPageSlugLabel,
@@ -242,6 +225,13 @@ class _CreateChannelPageState extends State<CreateChannelPage> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9-]')),
               ],
+              footer: _selectedServerUrl == null
+                  ? null
+                  : _ChannelUrlPreview(
+                      server: _selectedServerUrl!,
+                      slug: _slugCtrl.text.trim(),
+                      placeholder: l10n.createChannelPageSlugHint,
+                    ),
             ),
             const SizedBox(height: 8),
             _ServerSection(
@@ -342,6 +332,10 @@ class _LabeledField extends StatelessWidget {
   final TextEditingController controller;
   final List<TextInputFormatter>? inputFormatters;
   final VoidCallback? onChanged;
+  final TextCapitalization textCapitalization;
+
+  /// Drawn under the box (the slug's live address preview).
+  final Widget? footer;
 
   const _LabeledField({
     required this.label,
@@ -349,6 +343,8 @@ class _LabeledField extends StatelessWidget {
     this.hint,
     this.inputFormatters,
     this.onChanged,
+    this.textCapitalization = TextCapitalization.none,
+    this.footer,
   });
 
   @override
@@ -373,6 +369,7 @@ class _LabeledField extends StatelessWidget {
             controller: controller,
             inputFormatters: inputFormatters,
             onChanged: (_) => onChanged?.call(),
+            textCapitalization: textCapitalization,
             style: TextStyle(color: tokens.starkWhite, fontSize: 15),
             decoration: InputDecoration(
               hintText: hint,
@@ -398,7 +395,62 @@ class _LabeledField extends StatelessWidget {
               ),
             ),
           ),
+          if (footer != null) footer!,
         ],
+      ),
+    );
+  }
+}
+
+/// The address the channel will have, redrawn as the slug is typed:
+/// `<server>/api/<account>/channels/<slug>/json` — the same shape the
+/// profile tab record carries. The account is shortened in the middle; the
+/// slug is the bright part.
+class _ChannelUrlPreview extends StatelessWidget {
+  final String server;
+  final String slug;
+  final String placeholder;
+
+  const _ChannelUrlPreview({
+    required this.server,
+    required this.slug,
+    required this.placeholder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final base = server.endsWith('/')
+        ? server.substring(0, server.length - 1)
+        : server;
+    final addr = PublicOS.myPublicosAddress ?? '';
+    final shortAddr = addr.length > 12
+        ? '${addr.substring(0, 6)}…${addr.substring(addr.length - 4)}'
+        : addr;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 2, right: 2),
+      child: Text.rich(
+        TextSpan(
+          style: TextStyle(
+            color: tokens.textDim,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            height: 1.4,
+          ),
+          children: [
+            TextSpan(text: '$base/api/$shortAddr/channels/'),
+            TextSpan(
+              text: slug.isEmpty ? placeholder : slug,
+              style: slug.isEmpty
+                  ? null
+                  : TextStyle(
+                      color: tokens.starkWhite,
+                      fontWeight: FontWeight.w700,
+                    ),
+            ),
+            const TextSpan(text: '/json'),
+          ],
+        ),
       ),
     );
   }

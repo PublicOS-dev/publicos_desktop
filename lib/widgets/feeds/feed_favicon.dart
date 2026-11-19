@@ -38,6 +38,10 @@ class FeedFavicon extends StatefulWidget {
   /// icon that cannot be had. Null keeps the glyph throughout.
   final Widget? placeholder;
 
+  /// Shown when the feed has no icon to be had (and on an image error), in
+  /// place of the full-size RSS glyph. Null keeps the glyph.
+  final Widget? fallback;
+
   const FeedFavicon({
     super.key,
     required this.feedUrl,
@@ -46,6 +50,7 @@ class FeedFavicon extends StatefulWidget {
     this.fallbackColor,
     this.faviconFirst = false,
     this.placeholder,
+    this.fallback,
   });
 
   @override
@@ -113,11 +118,12 @@ class _FeedFaviconState extends State<FeedFavicon> {
     // while the network image loads (as ZeroCachedImage's placeholder), and
     // on error. Keeping it the exact `size` means the resolved favicon just
     // fades over it instead of reflowing the row.
-    final fallback = Icon(
-      Icons.rss_feed_rounded,
-      size: widget.size,
-      color: widget.fallbackColor ?? tokens.starkWhite,
-    );
+    final fallback = widget.fallback ??
+        Icon(
+          Icons.rss_feed_rounded,
+          size: widget.size,
+          color: widget.fallbackColor ?? tokens.starkWhite,
+        );
     // Favicon-first: when the favicon fails, the feed's own image is the next
     // rung — the default chain (image → favicon → glyph) in the same slot.
     final Widget onError = widget.faviconFirst

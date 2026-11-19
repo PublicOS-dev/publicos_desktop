@@ -5,6 +5,7 @@ import 'package:publicos_core/publicos_core.dart';
 import '../l10n/l10n_ext.dart';
 import '../router.dart' show appNavigatorKey;
 import '../router_helpers.dart';
+import 'post_links.dart';
 
 /// Inbound deep links on Windows — the Dart half.
 ///
@@ -128,7 +129,19 @@ abstract final class DeepLinks {
       return;
     }
 
+    // A shared post, in either shape (`/post?url=`, or a tab link carrying
+    // `?post=`), opens the post, never the tab.
+    if (link.post != null) {
+      if (!await openSharedPost(link)) {
+        _report((c) => c.l10n.notificationsScreenPostUnavailable);
+      }
+      return;
+    }
+
     switch (link.kind) {
+      case DeepLinkKind.post:
+        return; // always carries a post: handled above
+
       case DeepLinkKind.inboxId:
         AppNav.toInbox(context, link.identifier);
         return;

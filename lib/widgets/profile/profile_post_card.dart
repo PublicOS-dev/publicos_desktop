@@ -7,6 +7,7 @@ import 'package:zero_cached_image/zero_cached_image.dart';
 import 'package:zero_cached_thumbnail/zero_cached_thumbnail.dart';
 import 'package:publicos_desktop/widgets/shimmer_box.dart';
 import 'package:publicos_desktop/widgets/feeds/go_to_feed.dart';
+import 'package:publicos_desktop/widgets/feeds/mention_text.dart';
 import 'package:publicos_desktop/widgets/feeds/post_card.dart';
 import 'package:publicos_desktop/widgets/feeds/post_detail_page.dart';
 import 'package:publicos_desktop/widgets/profile/content_card.dart';
@@ -199,6 +200,16 @@ class _ProfilePostCardState extends State<ProfilePostCard>
 
   final ScrollController _scroll = ScrollController();
 
+  /// Resolves the body's `@[0xAddr]` mentions, as the feed's post card does.
+  /// Owned here so a name landing rebuilds the card and its height is
+  /// measured again (a name can wrap where the short address did not).
+  late final MentionResolver _mentions = MentionResolver()
+    ..addListener(_onMentionResolved);
+
+  void _onMentionResolved() {
+    if (mounted) setState(() {});
+  }
+
   /// Whether the post is taller than the card. Only then does the card
   /// scroll; otherwise the profile keeps the vertical swipe.
   bool _overflows = false;
@@ -247,6 +258,7 @@ class _ProfilePostCardState extends State<ProfilePostCard>
     _authorGrace?.cancel();
     _shimmer.dispose();
     _scroll.dispose();
+    _mentions.dispose();
     super.dispose();
   }
 
@@ -702,8 +714,9 @@ class _ProfilePostCardState extends State<ProfilePostCard>
                               const SizedBox(height: 3),
                             ],
                             if (body.isNotEmpty)
-                              Text(
+                              MentionText(
                                 body,
+                                resolver: _mentions,
                                 style: TextStyle(
                                     color: bodyColor, fontSize: 12, height: 1.35),
                               ),

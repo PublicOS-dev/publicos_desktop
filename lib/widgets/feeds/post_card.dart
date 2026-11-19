@@ -1513,6 +1513,7 @@ class _PostCardState extends State<PostCard>
                   _railItem(
                     icon: Icons.ios_share_rounded,
                     onTap: () => _sharePost(post),
+                    onLongPress: () => _sharePost(post, plain: true),
                   ),
                   _railItem(
                     icon: widget.isBookmarked
@@ -1536,10 +1537,12 @@ class _PostCardState extends State<PostCard>
     String? emoji,
     int? count,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
   }) {
     // Ink, not a bare detector: a ripple lets the user know the tap landed.
     return InkResponse(
       onTap: onTap,
+      onLongPress: onLongPress,
       radius: 24,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 7),
@@ -2759,6 +2762,7 @@ class _PostCardState extends State<PostCard>
           icon: Icons.ios_share_rounded,
           color: tokens.textDim,
           onTap: () => _sharePost(post),
+          onLongPress: () => _sharePost(post, plain: true),
         ),
         const SizedBox(width: 14),
         _buildActionItem(
@@ -2863,10 +2867,12 @@ class _PostCardState extends State<PostCard>
     required Color color,
     int? count,
     VoidCallback? onTap,
+    VoidCallback? onLongPress,
   }) {
     final showCount = count != null && count > 0;
     return InkResponse(
       onTap: onTap,
+      onLongPress: onLongPress,
       radius: 20,
       child: Padding(
         // 21 px glyph, hitbox 4px larger (2px each side) for easier taps.
@@ -2896,9 +2902,11 @@ class _PostCardState extends State<PostCard>
 
   /// Copy the canonical post URL to the clipboard. Falls back to externalUrl
   /// for RSS posts where the server hasn't filled `url` yet.
-  Future<void> _sharePost(Post post) async {
+  Future<void> _sharePost(Post post, {bool plain = false}) async {
     final l10n = context.l10n;
-    final url = post.url ?? post.externalUrl;
+    // Tap: the publicos.dev link. Long press ([plain]): the post's own
+    // internet address.
+    final url = plain ? plainLinkOf(post) : shareLinkOf(post);
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

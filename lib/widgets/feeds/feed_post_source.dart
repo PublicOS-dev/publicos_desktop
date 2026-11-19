@@ -1206,13 +1206,17 @@ class FeedPostSource extends PostSource {
     final profile = feeds.first.effectiveFoundAtAddress?.toLowerCase();
     if (onlyOwner && profile == ownerAddr) return null;
 
-    final writers = _isForum || onlyOwner
+    // Only an OPEN forum hides its writers ("hosted by"). An `approved`
+    // channel counts as a forum for the sort bar and the "+", but its
+    // writers are a known posters list, so they keep their "by x, y, z".
+    final openForum = _postingPolicy == 'open';
+    final writers = openForum || onlyOwner
         ? const <Contact>[]
         : [
             for (final a in writerAddrs)
               if (byAddr[a] != null) byAddr[a]!,
           ];
-    return (owner: owner, writers: writers, ownerWrites: onlyOwner && !_isForum);
+    return (owner: owner, writers: writers, ownerWrites: onlyOwner && !openForum);
   }
 
   // -----------------------------------------------------------------------

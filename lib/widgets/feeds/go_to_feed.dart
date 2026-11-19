@@ -53,16 +53,43 @@ Post withFeedLink(Post post, String? feedLink) {
   );
 }
 
-/// Same channel, whatever URL under it each side holds: PublicOS channels
-/// compare by owner + slug (hosts and `/json` vs `/rss` differ), anything
-/// else by the exact URL.
-bool _sameChannel(String a, String b) {
-  final ba = channelBaseOf(a);
-  final bb = channelBaseOf(b);
-  if (ba == null || bb == null) return a == b;
-  String tail(String base) =>
-      base.substring(base.indexOf('/api/')).toLowerCase();
-  return tail(ba) == tail(bb);
+/// The share link for [post]: the found-at tab's
+/// link carrying the post when the post knows its tab, else `/post?url=`.
+/// Null when the post has no address at all.
+String? shareLinkOf(Post post) {
+  final url = plainLinkOf(post);
+  if (url == null) return null;
+  return postShareLink(
+    postUrl: url,
+    feedUrl: feedUrlOf(post),
+    foundAtAddress: post.feedFoundAtAccountAddress,
+    tabKey: post.feedRecordKey,
+  );
+}
+
+/// The post's own internet address: our permalink, or an outside article's
+/// link.
+String? plainLinkOf(Post post) {
+  final url = post.url ?? post.externalUrl;
+  return url == null || url.isEmpty ? null : url;
+}
+
+/// The channel tab [key] on [address] when it still lists the feed
+/// [feedOrPostUrl] is under (Core's [sameChannel]: server, owner as written
+/// and slug, cut after the channel's name). Null when the tab is gone, is not
+/// a channel, points elsewhere, or the read failed. One eth_call.
+Future<Record?> verifiedFeedTab(
+    String address, String key, String feedOrPostUrl) async {
+  try {
+    final record =
+        await PublicOSContacts.getRecord(key, EthereumAddress.fromHex(address));
+    if (record != null &&
+        record.routerSubtype == RouterSubtype.channel &&
+        sameChannel(record.value, feedOrPostUrl)) {
+      return record;
+    }
+  } catch (_) {}
+  return null;
 }
 
 /// The tab a pin's [feedLink] names: the found-via account and the tab key,
@@ -88,18 +115,9 @@ Future<String?> feedTitleFor(String postUrl, String? feedLink) async {
   if (ref == null) return null;
   final tab = feedTabOf(feedLink);
   if (tab != null) {
-    try {
-      final record = await PublicOSContacts.getRecord(
-          tab.key, EthereumAddress.fromHex(tab.address));
-      final name = (record?.metadata['name'] as String?)?.trim();
-      if (record != null &&
-          record.routerSubtype == RouterSubtype.channel &&
-          _sameChannel(record.value, postUrl) &&
-          name != null &&
-          name.isNotEmpty) {
-        return name;
-      }
-    } catch (_) {}
+    final record = await verifiedFeedTab(tab.address, tab.key, postUrl);
+    final name = (record?.metadata['name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
   }
   final resp = await PublicOSChannels.getChannel(
     ownerAddress: ref.owner,
@@ -117,15 +135,11 @@ Future<void> goToFeed(BuildContext context, Post post) async {
   final key = post.feedRecordKey;
 
   if (addr != null && addr.isNotEmpty && key != null && key.isNotEmpty) {
-    Record? record;
-    try {
-      // One eth_call. Null is "gone" or an RPC failure; both read the feed.
-      record = await PublicOSContacts.getRecord(key, EthereumAddress.fromHex(addr));
-    } catch (_) {}
+    // One eth_call. Null is "gone", "points elsewhere" or an RPC failure;
+    // all read the feed.
+    final record = await verifiedFeedTab(addr, key, feedUrl);
     if (!context.mounted) return;
-    if (record != null &&
-        record.routerSubtype == RouterSubtype.channel &&
-        _sameChannel(record.value, feedUrl)) {
+    if (record != null) {
       await AppNav.toTab(context, addr, key);
       return;
     }

@@ -2,8 +2,8 @@ import 'package:publicos_core/publicos_core.dart';
 import 'package:flutter/material.dart';
 import 'package:zero_cached_image/zero_cached_image.dart';
 import '../../utils/favicon_utils.dart';
-import '../../utils/feed_metadata_utils.dart';
-import 'package:publicos_desktop/widgets/phigital_loading_widget.dart';
+import 'package:publicos_desktop/widgets/feeds/feed_favicon.dart';
+import 'package:publicos_desktop/widgets/shimmer_box.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 
 class TabIconWidget extends StatefulWidget {
@@ -20,90 +20,53 @@ class TabIconWidget extends StatefulWidget {
   State<TabIconWidget> createState() => _TabIconWidgetState();
 }
 
-class _TabIconWidgetState extends State<TabIconWidget> {
-  String? _imageUrl;
-  bool _isLoading = false;
-  
+class _TabIconWidgetState extends State<TabIconWidget>
+    with SingleTickerProviderStateMixin {
+  // Drives the shimmer while a channel's icon comes, matching the list
+  // header's tiles.
+  late final AnimationController _shimmer = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
   @override
-  void initState() {
-    super.initState();
-    _loadIcon();
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
   }
-  
-  @override
-  void didUpdateWidget(TabIconWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.record.key != widget.record.key) {
-      _loadIcon();
-    }
-  }
-  
-  Future<void> _loadIcon() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isLoading = true;
-      _imageUrl = null;
-    });
-    
-    try {
-      String? imageUrl;
-      
-      if (widget.record.routerSubtype == RouterSubtype.channel) {
-        // For RSS tabs, get the feed image first
-        final metadata = await FeedMetadataUtils.getFeedMetadata(widget.record.value);
-        imageUrl = metadata?.imageUrl;
-        
-        // If RSS feed has no image, try to get favicon from the feed's website
-        if (imageUrl == null || imageUrl.isEmpty) {
-          try {
-            final rssUri = Uri.parse(widget.record.value);
-            final websiteUrl = '${rssUri.scheme}://${rssUri.host}';
-            imageUrl = FaviconUtils.getFaviconUrl(websiteUrl);
-          } catch (e) {
-            // If URL parsing fails, imageUrl remains null
-          }
-        }
-      } else {
-        // For web tabs, get the favicon
-        imageUrl = FaviconUtils.getFaviconUrl(widget.record.value);
-      }
-      
-      if (mounted) {
-        setState(() {
-          _imageUrl = imageUrl;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _imageUrl = null;
-          _isLoading = false;
-        });
-      }
-    }
-  }
-  
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = GlassTokens.of(context);
     final isRssTab = widget.record.routerSubtype == RouterSubtype.channel;
-    
-    if (_isLoading) {
-      return Container(
-        width: widget.size,
-        height: widget.size,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Center(
-          child: PhigitalLoadingWidget(size: 10, showShadows: false),
-        ),
-      );
-    }
-    
+    final fallback = _buildFallbackIcon(theme, isRssTab);
+
+    // A channel tab reads the icon registry through FeedFavicon:
+    // a channel any load has read paints at once, an unknown one costs one
+    // shared fetch. Before, this widget downloaded the whole channel itself
+    // and ignored the registry, so the tabs sheet spun long after the
+    // profile had the icon.
+    final Widget child = isRssTab
+        ? FeedFavicon(
+            feedUrl: widget.record.value,
+            size: widget.size,
+            cornerRadius: 5,
+            fallback: fallback,
+            placeholder: ShimmerBox(
+              progress: _shimmer,
+              width: widget.size,
+              height: widget.size,
+              radius: 5,
+              base: tokens.surfaceElevated,
+              highlight: Color.alphaBlend(
+                tokens.starkWhite.withValues(alpha: 0.10),
+                tokens.surfaceElevated,
+              ),
+            ),
+          )
+        : _buildWebIcon(fallback);
+
     return Container(
       width: widget.size,
       height: widget.size,
@@ -113,22 +76,26 @@ class _TabIconWidgetState extends State<TabIconWidget> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(5),
-        child: _imageUrl != null
-            ? ZeroCachedImage(
-                imageUrl: _imageUrl!,
-                width: widget.size,
-                height: widget.size,
-                fit: BoxFit.cover,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
-                placeholder: (context, url) => _buildFallbackIcon(theme, isRssTab),
-                errorWidget: (context, url, error) => _buildFallbackIcon(theme, isRssTab),
-              )
-            : _buildFallbackIcon(theme, isRssTab),
+        child: child,
       ),
     );
   }
-  
+
+  /// A web tab: the site's favicon, built locally (no fetch).
+  Widget _buildWebIcon(Widget fallback) {
+    final url = FaviconUtils.getFaviconUrl(widget.record.value);
+    return ZeroCachedImage(
+      imageUrl: url,
+      width: widget.size,
+      height: widget.size,
+      fit: BoxFit.cover,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, url) => fallback,
+      errorWidget: (context, url, error) => fallback,
+    );
+  }
+
   Widget _buildFallbackIcon(ThemeData theme, bool isRssTab) {
     return Container(
       width: widget.size,
