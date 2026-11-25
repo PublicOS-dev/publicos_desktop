@@ -25,11 +25,13 @@ const _kIncoming = Color(0xFF34d399); // green
 const _kOutgoing = Color(0xFFf87171); // soft red
 
 /// Full transaction-history bottom sheet for one wallet. Presentational: it's
-/// handed the already-fetched [transfers] (OX, newest-first — see
-/// `PublicOSWallets.getRecentTransfers`) so it never scans the chain itself.
+/// handed the first page of [transfers] (OX, newest-first, from the device's
+/// stored history, `PublicOSWallets.getTransferHistory`) and asks its caller
+/// for each older page as the user scrolls ([onLoadMore]).
+/// It never reads the chain or the database itself.
 /// A quiet wallet shows the empty state; the loader shows while the first scan
 /// is still in flight.
-class TransactionHistorySheet extends StatelessWidget {
+class TransactionHistorySheet extends StatefulWidget {
   /// The wallet (Safe) address whose activity this is — decides send/receive.
   final String address;
   final List<TokenTransfer> transfers;
@@ -43,17 +45,77 @@ class TransactionHistorySheet extends StatelessWidget {
   /// the row shows the short hex and **no icon**.
   final Map<String, Contact> counterparties;
 
+  /// The page after [last] (the oldest transfer showing), oldest pages last.
+  /// Null = no paging: the sheet shows [transfers] and nothing more.
+  final Future<List<TokenTransfer>> Function(TokenTransfer last)? onLoadMore;
+
+  /// Rows per page. A page shorter than this is the last one.
+  final int pageSize;
+
   const TransactionHistorySheet({
     super.key,
     required this.address,
     required this.transfers,
     this.loading = false,
     this.counterparties = const {},
+    this.onLoadMore,
+    this.pageSize = 25,
   });
+
+  @override
+  State<TransactionHistorySheet> createState() =>
+      _TransactionHistorySheetState();
+}
+
+class _TransactionHistorySheetState extends State<TransactionHistorySheet> {
+  final ScrollController _scroll = ScrollController();
+  late final List<TokenTransfer> _transfers = [...widget.transfers];
+  late bool _hasMore =
+      widget.onLoadMore != null && widget.transfers.length >= widget.pageSize;
+  bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore || !_scroll.hasClients) return;
+    if (_scroll.position.extentAfter < 240) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final more = widget.onLoadMore;
+    if (more == null || _transfers.isEmpty) return;
+    setState(() => _loadingMore = true);
+    List<TokenTransfer> page = const [];
+    try {
+      page = await more(_transfers.last);
+    } catch (_) {
+      // Leave what is showing; the next scroll tries again.
+    }
+    if (!mounted) return;
+    setState(() {
+      _transfers.addAll(page);
+      _hasMore = page.length >= widget.pageSize;
+      _loadingMore = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = GlassTokens.of(context);
+    final address = widget.address;
+    final loading = widget.loading;
+    final counterparties = widget.counterparties;
+    final transfers = _transfers;
     final me = EthereumAddress.fromHex(address);
 
     return Container(
@@ -124,12 +186,23 @@ class TransactionHistorySheet extends StatelessWidget {
             else
               Flexible(
                 child: ListView.separated(
+                  controller: _scroll,
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                  itemCount: transfers.length,
+                  // One more row while an older page is being read.
+                  itemCount: transfers.length + (_loadingMore ? 1 : 0),
                   separatorBuilder: (_, __) =>
                       Divider(color: tokens.borderSubtle, height: 1, indent: 52),
                   itemBuilder: (_, i) {
+                    if (i >= transfers.length) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Center(
+                          child: PhigitalLoadingWidget(
+                              size: 22, showShadows: false),
+                        ),
+                      );
+                    }
                     final t = transfers[i];
                     final other = t.isOutgoing(me) ? t.to : t.from;
                     return _TransferRow(

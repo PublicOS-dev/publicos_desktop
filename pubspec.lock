@@ -826,7 +826,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "7ecdb1a1f69129e8fe78d69d81b890612340f45e"
+      resolved-ref: f3ef5aafa8d7f8000e6b5a8ccb70fe8a116daa7d
       url: "https://github.com/PublicOS-dev/PublicOS_Core.git"
     source: git
     version: "0.8.0"
@@ -835,7 +835,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "89a3d97ee9bcb1ff7797d7d6fc31f8de09ee5404"
+      resolved-ref: f2535b29f6e5b4f91cc5f81680727c3a189044d8
       url: "https://github.com/PublicOS-dev/publicos_web3_bridge.git"
     source: git
     version: "0.1.0"

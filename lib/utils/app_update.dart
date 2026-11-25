@@ -327,17 +327,49 @@ class AppUpdate {
       database: '${support.path}\\publicos.sqlite',
       log: '${dir.path}\\update.log',
     ));
+    await launchHidden(script.path);
+    exit(0);
+  }
+
+  /// Starts the hand-over script with a hidden console of its own.
+  ///
+  /// Started detached, `cmd` has no console, so every console program the
+  /// script runs (`tasklist`, `find`, `ping`, once a second while it waits)
+  /// opened a window of its own: windows that kept reappearing while
+  /// the update waited. `Start-Process -WindowStyle Hidden` gives `cmd`
+  /// one hidden console that its children share. If PowerShell cannot do it,
+  /// the old detached start is the fallback: an update with windows is better
+  /// than no update.
+  @visibleForTesting
+  static Future<void> launchHidden(String scriptPath) async {
+    try {
+      final quoted = scriptPath.replaceAll("'", "''");
+      final r = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-Command',
+        "Start-Process -FilePath cmd.exe -ArgumentList '/c','\"$quoted\"' -WindowStyle Hidden",
+      ]).timeout(const Duration(seconds: 15));
+      if (r.exitCode == 0) return;
+    } catch (_) {}
     await Process.start(
       'cmd.exe',
-      ['/c', script.path],
+      ['/c', scriptPath],
       mode: ProcessStartMode.detached,
     );
-    exit(0);
   }
 
   /// The hand-over script. `robocopy /E`, never `/MIR`: someone may have
   /// unzipped the app next to their own files. robocopy answers below 8 on
   /// success. `ping` is the wait: `timeout` refuses to run without a console.
+  /// The wait for the old app is bounded: after [waitSeconds] checks (one to
+  /// two seconds each) the script ends
+  /// that process itself, so an app that did not exit cannot hold the update
+  /// forever.
+  static const waitSeconds = 30;
+
   @visibleForTesting
   static String helperScript({
     required int pid,
@@ -353,12 +385,20 @@ class AppUpdate {
       'setlocal',
       'set "LOG=$log"',
       'echo ==== %DATE% %TIME% update to build $build >> "%LOG%"',
+      'set /a WAITED=0',
       ':wait',
       'tasklist /FI "PID eq $pid" /FO CSV /NH 2>nul | find /I "$exeName" >nul',
-      'if not errorlevel 1 (',
+      'if errorlevel 1 goto gone',
+      'if %WAITED% GEQ $waitSeconds (',
+      '  echo the old app did not exit after $waitSeconds checks, ending it >> "%LOG%"',
+      '  taskkill /F /PID $pid >> "%LOG%" 2>&1',
       '  ping -n 2 127.0.0.1 >nul',
-      '  goto wait',
+      '  goto gone',
       ')',
+      'ping -n 2 127.0.0.1 >nul',
+      'set /a WAITED+=1',
+      'goto wait',
+      ':gone',
       'if exist "$database" copy /Y "$database" "$database.before-update" >> "%LOG%" 2>&1',
       'robocopy "$source" "$appDir" /E /R:10 /W:1 /NFL /NDL /NJH /NP >> "%LOG%" 2>&1',
       'if errorlevel 8 (',

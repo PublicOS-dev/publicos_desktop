@@ -128,6 +128,7 @@ class _ChatSettingsDialogState extends State<_ChatSettingsDialog> {
                         tokens,
                         title: context.l10n.desktopBubbleColorSection,
                         defaultLabel: context.l10n.manageServerPageIdentity,
+                        note: context.l10n.desktopBubbleColorIdentityNote,
                         current: _ap.bubbleColorFor(_editingOwn),
                         onPick: (c) async {
                           await _ap.setBubbleColor(_editingOwn, c);
@@ -437,11 +438,24 @@ class _ChatSettingsDialogState extends State<_ChatSettingsDialog> {
     required String defaultLabel,
     required Color? current,
     required Future<void> Function(Color?) onPick,
+    String? note,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(tokens, title),
+        // What the default chip means (bubble color: the Color record).
+        if (note != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            note,
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 11,
+              color: tokens.textDim,
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,

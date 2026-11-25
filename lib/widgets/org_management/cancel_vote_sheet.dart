@@ -710,13 +710,13 @@ class _OrgLine extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
-            Opacity(opacity: dim ? 0.5 : 1, child: GlassContactIcon(contact: contact, size: 32)),
+            Opacity(opacity: dim ? 0.5 : 1, child: GlassContactIcon(opensProfile: true, contact: contact, size: 32)),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
+              child: ContactProfileTap(contact: contact, child: Text(
                 contact.displayName,
                 style: TextStyle(fontFamily: 'SpaceGrotesk', fontSize: 14, fontWeight: FontWeight.w700, color: dim ? tokens.textDim : tokens.starkWhite),
-              ),
+              )),
             ),
           ],
         ),

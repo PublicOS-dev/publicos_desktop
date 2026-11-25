@@ -271,10 +271,10 @@ class _ChildRowState extends State<_ChildRow> {
       ),
       child: Row(
         children: [
-          GlassContactIcon(contact: contact, size: 36),
+          GlassContactIcon(opensProfile: true, contact: contact, size: 36),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            child: ContactProfileTap(contact: contact, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -297,7 +297,7 @@ class _ChildRowState extends State<_ChildRow> {
                   ),
                 ),
               ],
-            ),
+            )),
           ),
           if (_busy)
             const SizedBox(width: 40, height: 40, child: Center(child: PixelRainLoadingWidget(size: 20, showShadows: false)))

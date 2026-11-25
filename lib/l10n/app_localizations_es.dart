@@ -577,6 +577,67 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ocurrió un error inesperado durante el inicio. Inténtalo de nuevo.';
 
   @override
+  String get lockNoLockTitle =>
+      'Windows Hello no está configurado en esta computadora';
+
+  @override
+  String get lockNoLockBody =>
+      'PublicOS guarda las llaves de tus cuentas. Te recomendamos mucho configurar Windows Hello (un PIN, huella o rostro) en esta computadora.\n\nSi prefieres no hacerlo, necesitas poner un PIN de 6 dígitos para PublicOS.';
+
+  @override
+  String get lockOpenSettings => 'ABRIR AJUSTES DE WINDOWS';
+
+  @override
+  String get lockIHaveSetLock => 'YA CONFIGURÉ WINDOWS HELLO';
+
+  @override
+  String get lockSetPinInstead => 'MEJOR PONER UN PIN';
+
+  @override
+  String get lockSetPinTitle => 'Elige un PIN de 6 dígitos';
+
+  @override
+  String get lockSetPinBody =>
+      'Lo escribirás cada vez que abras PublicOS.\n\nDespués de 10 intentos fallidos PublicOS se bloquea. Si se bloquea, o si olvidas el PIN, la única forma de volver a entrar es restablecer PublicOS en esta computadora.';
+
+  @override
+  String get lockConfirmPinTitle => 'Escribe el PIN otra vez';
+
+  @override
+  String get lockPinMismatch => 'Los dos PIN no coinciden. Empieza de nuevo.';
+
+  @override
+  String get lockEnterPinTitle => 'Escribe tu PIN';
+
+  @override
+  String lockWrongPin(int count) {
+    return 'PIN incorrecto. Intentos restantes: $count.';
+  }
+
+  @override
+  String get lockForgotPin => 'OLVIDÉ MI PIN';
+
+  @override
+  String get lockLockedTitle => 'PublicOS está bloqueado';
+
+  @override
+  String get lockLockedBody =>
+      'Demasiados intentos fallidos. La única forma de volver a entrar es restablecer PublicOS en esta computadora.';
+
+  @override
+  String get lockResetButton => 'RESTABLECER PUBLICOS EN ESTA COMPUTADORA';
+
+  @override
+  String get lockResetTitle => '¿Restablecer PublicOS en esta computadora?';
+
+  @override
+  String get lockResetBody =>
+      'Esto borra todo lo que PublicOS guarda en esta computadora: tus llaves, mensajes y ajustes. No se puede deshacer. PublicOS se cierra al terminar.\n\nTus cuentas no se borran. Vuelves a entrar a ellas igual que lo harías en una computadora nueva. Si esta computadora tiene la única llave de una cuenta y no tienes respaldo de ella, pierdes el acceso a esa cuenta.';
+
+  @override
+  String get lockResetConfirm => 'RESTABLECER';
+
+  @override
   String get onbPublicosTitle => 'PublicOS';
 
   @override
@@ -902,7 +963,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onbCoachGenerate =>
-      '**Genera** una llave. Se crea en este dispositivo y no se guarda en ningún otro lado.';
+      'Tus mensajes llegan a una **bandeja** afuera, y cada bandeja tiene su propia cerradura. Puedes poner todas las bandejas que quieras. Hagamos la llave de la primera.';
+
+  @override
+  String get onbCoachHouse =>
+      'Este es tu **llavero**. Piensa en tu cuenta como tu casa. Ya tienes la llave de la puerta principal: es la que dice **SESIÓN**.';
+
+  @override
+  String get onbCoachContinue => 'Toca en cualquier lugar para continuar';
 
   @override
   String get onbCoachSim =>
@@ -1396,6 +1464,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Llave eliminada. La mensajería queda apagada hasta que elijas una llave.';
 
   @override
+  String get keychainKeyUnloaded =>
+      'Llave descargada. La mensajería queda apagada hasta que cargues una llave.';
+
+  @override
   String get keychainAddressCopied => 'Dirección copiada al portapapeles';
 
   @override
@@ -1482,7 +1554,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get keychainOfferRegLabel => 'Nombre de la pestaña';
 
   @override
-  String get keychainOfferRegDontAsk => 'No volver a preguntar';
+  String get keychainOfferRegDontAsk =>
+      'No volver a sugerir para ninguna llave';
+
+  @override
+  String get keychainOfferRegKeepPrivate => 'Mantener privada';
 
   @override
   String get keychainOfferRegPublish => 'PUBLICAR';
@@ -1895,6 +1971,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get walletActivityTitle => 'Actividad';
+
+  @override
+  String get walletWatchOnlyCantSign =>
+      'Billetera de solo lectura: este dispositivo no tiene su llave, así que no puede firmar.';
 
   @override
   String get walletActivityEmpty =>
@@ -5216,6 +5296,31 @@ class AppLocalizationsEs extends AppLocalizations {
       'La reacción que agrega un doble toque en una publicación. Toca para elegir.';
 
   @override
+  String get feedsSettingsSheetGroupTips => 'Propinas';
+
+  @override
+  String get feedsSettingsSheetMyTipLabel => 'MI PROPINA';
+
+  @override
+  String get feedsSettingsSheetMyTipHint =>
+      'Viene preseleccionada al dar propina a una publicación, y es lo que envía mantener presionado el botón de propina.';
+
+  @override
+  String get feedsSettingsSheetQuickTipLabel =>
+      'MANTÉN PRESIONADO PARA DAR PROPINA';
+
+  @override
+  String get feedsSettingsSheetQuickTipOn =>
+      'Activado: mantén presionado el botón de propina para enviar tu propina al autor desde tu cartera principal. Toca otra vez mientras se llena el anillo para cancelar.';
+
+  @override
+  String get feedsSettingsSheetQuickTipOff =>
+      'Desactivado: el botón de propina siempre abre la hoja de propina.';
+
+  @override
+  String get quickTipFailed => 'La propina no se envió.';
+
+  @override
   String get feedsSettingsSheetGroupSignature => 'Firma';
 
   @override
@@ -5910,6 +6015,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get postCardFeedContextOn => 'en';
+
+  @override
+  String get postCardFeedContextIn => 'en';
 
   @override
   String feedReaderPageUpdated(String ago) {
@@ -6715,6 +6823,78 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get messagesSettingsSheetBackupFailed => 'Falló el respaldo.';
+
+  @override
+  String get messagesSettingsSheetSspBackupLabel => 'Respaldar en el SSP';
+
+  @override
+  String get messagesSettingsSheetSspBackupSubtitle =>
+      'Una copia en tu servidor por 24 horas, para pasar tus chats a otro dispositivo';
+
+  @override
+  String get messagesSettingsSheetSspBackupWarning =>
+      'Este es un respaldo de corta duración. Se guarda en tu servidor por 24 horas y después se borra. Los mensajes posteriores a este momento no forman parte de él.\n\nSi quieres una copia duradera, descarga la base de datos con la otra opción.';
+
+  @override
+  String get messagesSettingsSheetSspBackupWorking =>
+      'Respaldando en tu SSP…\n\nEsto puede tardar de 1 a 2 minutos. No salgas de esta pantalla.';
+
+  @override
+  String get messagesSettingsSheetSspBackupDoneTitle => 'Respaldo hecho';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactInbox => 'Inbox';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactKey => 'Llave';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactSize => 'Tamaño';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactDeleted => 'Se borra el';
+
+  @override
+  String get messagesSettingsSheetSspBackupDone =>
+      'Respaldo hecho. Tu servidor lo borra en 24 horas.';
+
+  @override
+  String get messagesSettingsSheetSspBackupTooLarge =>
+      'Tu base de datos de chats pasa de 100 MB, demasiado grande para este respaldo. Descarga la base de datos con la otra opción.';
+
+  @override
+  String messagesSettingsSheetSspBackupNoSpace(int need, int free) {
+    return 'No hay espacio suficiente en tu servidor: el respaldo necesita $need MB y hay $free MB libres.';
+  }
+
+  @override
+  String get keychainSetupRestoreSsp => 'Restaurar desde tu SSP';
+
+  @override
+  String keychainSetupRestoreSspDetail(String when) {
+    return 'Tu servidor guarda un respaldo de los chats de esta llave, hecho $when. Conserva tu historial de mensajes y no usa un espacio de dispositivo.';
+  }
+
+  @override
+  String get keychainRestoreSspWorking =>
+      'Restaurando tus chats…\n\nNo cierres la app.';
+
+  @override
+  String get keychainRestoreSspWrongKey => 'Esta llave no hizo ese respaldo.';
+
+  @override
+  String get keychainDeleteChatsTitle => '¿Borrar también los chats?';
+
+  @override
+  String keychainDeleteChatsBody(String inbox) {
+    return '¿Borrar también de este dispositivo los chats y los datos de XMTP de esta llave y del inbox \"$inbox\"?\n\nLa misma llave con otra etiqueta también los perderá. Sin un respaldo no se pueden recuperar.';
+  }
+
+  @override
+  String get keychainDeleteChatsKeep => 'Conservar chats';
+
+  @override
+  String get keychainDeleteChatsDelete => 'Borrar chats';
 
   @override
   String get messagesSettingsSheetBackupFileTypeLabel =>
@@ -9190,6 +9370,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Notificaciones de eventos on-chain';
 
   @override
+  String get appSettingsPageNotifsNotArrivingDesc =>
+      '¿No llegan las notificaciones? Android puede estar deteniendo la app en segundo plano. En los ajustes del sistema de la app, permite los datos en segundo plano y pon el uso de batería sin restricciones.';
+
+  @override
+  String get appSettingsPageOpenSystemSettingsButton =>
+      'ABRIR AJUSTES DEL SISTEMA';
+
+  @override
   String get appSettingsPageSessionTitle => 'Sesión';
 
   @override
@@ -10703,6 +10891,38 @@ class AppLocalizationsEs extends AppLocalizations {
   String get contactsViewSearchHint => 'Busca por nombre, dirección o inbox';
 
   @override
+  String get contactsViewFilterStarred =>
+      'Favoritos';
+
+  @override
+  String get contactsViewStar =>
+      'Agregar a favoritos';
+
+  @override
+  String get contactsViewUnstar =>
+      'Quitar de favoritos';
+
+  @override
+  String get contactsViewNoStarred =>
+      'Aún no tienes favoritos. Apaga Favoritos para ver a todos.';
+
+  @override
+  String get notificationsScreenStarredNote =>
+      'Solo tus favoritos generan notificaciones de la cadena.';
+
+  @override
+  String get browserEditProfile =>
+      'Editar perfil';
+
+  @override
+  String get browserStopEditing =>
+      'Dejar de editar';
+
+  @override
+  String get browserStarTooltip =>
+      'Favorito: recibe notificaciones de la cadena sobre este contacto';
+
+  @override
   String get contactsViewFilterPersonal => 'Personal';
 
   @override
@@ -10845,6 +11065,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get messagesViewNoKeysSubtitleAfter => ' en el llavero.';
+
+  @override
+  String get chatNoKeyTitle =>
+      'Carga una llave en XMTP para empezar a enviar mensajes';
 
   @override
   String get manageChannelPageManageLabel => 'gestionar';
@@ -12810,6 +13034,34 @@ class AppLocalizationsEs extends AppLocalizations {
   String get channelHeaderHostedBy => 'alojado por';
 
   @override
+  String get channelHostedByCopy => 'una copia';
+
+  @override
+  String get channelHostNoSigTitle => 'SIN FIRMA DEL DUEÑO';
+
+  @override
+  String get channelHostNoSigExplain =>
+      'No hay firma del dueño que revisar, así que no podemos confirmar quién aloja este feed.';
+
+  @override
+  String get channelHostBadSigTitle => 'FIRMA DEL DUEÑO INVÁLIDA';
+
+  @override
+  String get channelHostBadSigExplain =>
+      'Hay una firma del dueño, y es inválida. No podemos confirmar que el dueño declarado haya aceptado alojar este feed.';
+
+  @override
+  String get signedCopyTitle => 'COPIA FIRMADA';
+
+  @override
+  String get signedCopyPostExplain =>
+      'Una copia firmada de la publicación original. Cada campo y cada firma son correctos; aquí se lee desde otra dirección que la que firmó el autor.';
+
+  @override
+  String get signedCopyChannelExplain =>
+      'El dueño firmó este canal en otra dirección. Esta es una copia firmada.';
+
+  @override
   String channelHeaderVerifiedReadersWord(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13213,6 +13465,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get chsPostApprovedSub => 'Una lista solo para publicar.';
+
+  @override
+  String get chsSubLayout => 'Cómo se ve';
+
+  @override
+  String get chsLayoutFeed => 'Feed';
+
+  @override
+  String get chsLayoutFeedSub => 'Lo más nuevo primero, sin votos.';
+
+  @override
+  String get chsLayoutForum => 'Foro';
+
+  @override
+  String get chsLayoutForumSub => 'Votos, y orden por New, Top, Hot.';
 
   @override
   String get chsPostFilterGrp =>
@@ -13633,6 +13900,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Las tarjetas arrancan solas en vez de esperar un toque. Usa más memoria.';
 
   @override
+  String get desktopSettingsAppearanceTitle => 'Apariencia';
+
+  @override
   String get desktopLogOut => 'CERRAR SESIÓN';
 
   @override
@@ -13812,6 +14082,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopBubbleColorSection => 'COLOR DE BURBUJA';
+
+  @override
+  String get desktopBubbleColorIdentityNote =>
+      '\"Identidad\" usa el registro Color de cada cuenta, el mismo color de la barra de dirección de su dominio. Elige el tuyo en la app Cuenta, o cámbialo aquí.';
 
   @override
   String get desktopAutoLabel => 'Auto';
@@ -15415,6 +15689,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get matureGateBack => 'Regresar';
 
   @override
+  String get matureGateIosBody =>
+      'Este perfil tiene contenido para adultos, que todavía no está disponible en iPhone.';
+
+  @override
   String get accountTagsSection => 'Etiquetas de la cuenta';
 
   @override
@@ -15481,11 +15759,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get postSigExplainUnsigned =>
-      'Sin firma. El autor decidió no firmar, así que solo el servidor responde por quién la escribió y qué decía.';
+      'Sin firma. No hay firma que revisar, así que no podemos confirmar quién la escribió.';
 
   @override
   String get postSigExplainBad =>
-      'Firma inválida. La firma no coincide con el contenido o con quien firma. La publicación pudo alterarse después de firmarse.';
+      'Firma inválida. Hay una firma, y no coincide con esta publicación.';
 
   @override
   String get postSigExplainUnchecked =>

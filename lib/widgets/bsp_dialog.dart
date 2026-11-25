@@ -1174,6 +1174,7 @@ class _BspCard extends StatelessWidget {
         // fallback param like the client's) — synthesize a placeholder
         // contact until the owner resolves.
         GlassContactIcon(
+          opensProfile: true,
           contact:
               ownerContact ??
               Contact(
@@ -1184,7 +1185,7 @@ class _BspCard extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Flexible(
-          child: Text(
+          child: ContactProfileTap(contact: ownerContact, address: bsp.owner.eip55With0x, child: Text(
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1193,7 +1194,7 @@ class _BspCard extends StatelessWidget {
               color: tokens.starkWhite,
               letterSpacing: 0.3,
             ),
-          ),
+          )),
         ),
       ],
     );

@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:flutter/material.dart';
 import 'package:publicos_desktop/widgets/key_lifetime_line.dart';
+import 'package:publicos_desktop/widgets/chat_no_key_state.dart' show xmtpKeyEpoch;
 import 'package:flutter/services.dart';
 import 'package:publicos_core/publicos_core.dart';
 import 'package:zero_cached_image/zero_cached_image.dart';
@@ -22,6 +23,9 @@ import 'import_key_dialog.dart';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:intl/intl.dart' show DateFormat;
+import 'package:path_provider/path_provider.dart';
+import 'fullscreen_overlay.dart';
 import 'package:web3dart/web3dart.dart' show EthPrivateKey;
 
 import '../l10n/l10n_ext.dart';
@@ -81,6 +85,8 @@ Future<void> showKeychainDialog(
   KeychainOnboardingMode onboardingMode = KeychainOnboardingMode.off,
   GlobalKey? tourGenerateKey,
   GlobalKey? tourSimKey,
+  GlobalKey? tourTitleKey,
+  GlobalKey? tourSessionKey,
 }) {
   return showDialog<void>(
     context: context,
@@ -90,6 +96,8 @@ Future<void> showKeychainDialog(
       onboardingMode: onboardingMode,
       tourGenerateKey: tourGenerateKey,
       tourSimKey: tourSimKey,
+      tourTitleKey: tourTitleKey,
+      tourSessionKey: tourSessionKey,
     ),
   );
 }
@@ -110,12 +118,19 @@ class _KeychainDialog extends StatefulWidget {
   final GlobalKey? tourGenerateKey;
   final GlobalKey? tourSimKey;
 
+  /// The title and the session key row, for the tour's house beat, which
+  /// spotlights both at once before GENERATE.
+  final GlobalKey? tourTitleKey;
+  final GlobalKey? tourSessionKey;
+
   const _KeychainDialog({
     this.myContact,
     this.onKeysChanged,
     this.onboardingMode = KeychainOnboardingMode.off,
     this.tourGenerateKey,
     this.tourSimKey,
+    this.tourTitleKey,
+    this.tourSessionKey,
   });
 
   bool get inTour => onboardingMode == KeychainOnboardingMode.tour;
@@ -405,6 +420,36 @@ class _KeychainDialogState extends State<_KeychainDialog>
       );
       if (confirmed != true) return;
     }
+
+    // Second question: the key's chats stay on the
+    // device unless the user says so here. Asked only when this key has chat
+    // data on this device. Dismissing the dialog stops the whole delete.
+    final currentAddr = _userAddress;
+    bool deleteChats = false;
+    String? chatsInbox;
+    if (currentAddr != null) {
+      chatsInbox = await PublicOSKeychain.keyChatsInboxId(currentAddr, label);
+      if (!mounted) return;
+      if (chatsInbox != null) {
+        final short = chatsInbox.length > 12
+            ? '${chatsInbox.substring(0, 6)}...${chatsInbox.substring(chatsInbox.length - 4)}'
+            : chatsInbox;
+        final answer = await _confirm(
+          title: context.l10n.keychainDeleteChatsTitle,
+          body: context.l10n.keychainDeleteChatsBody(short),
+          cta: context.l10n.keychainDeleteChatsDelete,
+          cancel: context.l10n.keychainDeleteChatsKeep,
+          destructive: true,
+        );
+        if (answer == null || !mounted) return;
+        deleteChats = answer;
+      }
+    }
+    // The same inbox may be loaded under another label of this key.
+    final unloadForChats = deleteChats &&
+        !loaded &&
+        chatsInbox != null &&
+        PublicOS.clientXmtpInboxId == chatsInbox;
     final addr = _userAddress;
     if (addr == null) {
       _setError(context.l10n.bspScreenNoActiveAccount);
@@ -413,8 +458,8 @@ class _KeychainDialogState extends State<_KeychainDialog>
     try {
       setState(() => _loading = true);
       // Unload first, then delete — never the other way round.
-      if (loaded) await _unloadXmtp();
-      await PublicOSKeychain.deleteKey(addr, label);
+      if (loaded || unloadForChats) await _unloadXmtp();
+      await PublicOSKeychain.deleteKey(addr, label, deleteChats: deleteChats);
       if (_currentSelectedKey == label) _currentSelectedKey = null;
       if (!mounted) return;
       _snack(loaded
@@ -449,6 +494,35 @@ class _KeychainDialogState extends State<_KeychainDialog>
     PublicOS.currentXmtpKeyLabel = null;
   }
 
+  /// The loaded key's green sim, pressed: unload the key and stop the
+  /// client. Client parity (keychain_sheet._unloadKey): the delete path's
+  /// unload with no delete, the saved selection cleared so the next start
+  /// does not load it back, then the dialog closes like after a load.
+  Future<void> _unloadKey() async {
+    try {
+      setState(() => _loading = true);
+      await _unloadXmtp();
+      final addr = _userAddress;
+      if (addr != null) await PublicOSKeychain.clearXmtpSelectedKey(addr);
+      if (mounted) {
+        setState(() {
+          _currentSelectedKey = null;
+          _loading = false;
+        });
+        _snack(context.l10n.keychainKeyUnloaded);
+      }
+      // An open chat tab swaps to its "load a key" tile on this.
+      xmtpKeyEpoch.value++;
+      widget.onKeysChanged?.call();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        _snack(localizedError(context.l10n, e));
+        setState(() => _loading = false);
+      }
+    }
+  }
+
   Future<void> _selectKey(String label) async {
     final addr = _userAddress;
     if (addr == null) {
@@ -479,6 +553,9 @@ class _KeychainDialogState extends State<_KeychainDialog>
         await _maybeOfferInboxRegistration(context, _snack,
             inTour: widget.inTour);
       }
+      // An open chat tab mounts (or remounts on the new inbox) on this,
+      // whichever door opened the keychain.
+      xmtpKeyEpoch.value++;
       widget.onKeysChanged?.call();
       // Picking a key is the errand - close the keychain once it is loaded,
       // as mobile does. The snack rides the app-level
@@ -983,6 +1060,7 @@ class _KeychainDialogState extends State<_KeychainDialog>
     required String body,
     required String cta,
     bool destructive = false,
+    String? cancel,
   }) {
     return showDialog<bool>(
       context: context,
@@ -1055,7 +1133,7 @@ class _KeychainDialogState extends State<_KeychainDialog>
                           ),
                           onPressed: () => Navigator.pop(ctx, false),
                           child: Text(
-                            ctx.l10n.dlgCancel,
+                            cancel ?? ctx.l10n.dlgCancel,
                             style: const TextStyle(
                               fontFamily: 'SpaceGrotesk',
                               fontWeight: FontWeight.w700,
@@ -1308,6 +1386,7 @@ class _KeychainDialogState extends State<_KeychainDialog>
           const SizedBox(width: 10),
           Text(
             context.l10n.keychainTitle.toUpperCase(),
+            key: widget.tourTitleKey,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
@@ -1375,7 +1454,10 @@ class _KeychainDialogState extends State<_KeychainDialog>
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       children: [
-        _buildSessionKeyTile(tokens),
+        KeyedSubtree(
+          key: widget.tourSessionKey,
+          child: _buildSessionKeyTile(tokens),
+        ),
         const SizedBox(height: 14),
         if (_keys.isEmpty && !_loading)
           Padding(
@@ -1927,7 +2009,9 @@ class _KeychainDialogState extends State<_KeychainDialog>
                               ? Icons.sim_card_rounded
                               : Icons.sim_card_outlined,
                           primary: isCurrentKey,
-                          onTap: isCurrentKey ? null : () => _selectKey(label),
+                          onTap: isCurrentKey
+                              ? (widget.inTour ? null : _unloadKey)
+                              : () => _selectKey(label),
                           tokens: tokens,
                         ),
                         const SizedBox(width: 4),
@@ -2432,6 +2516,11 @@ class _KeychainActionRow extends StatelessWidget {
 /// `KeychainSheet.kInboxPromptOffKey` in publicos_client.
 const String kInboxPromptOffKey = 'xmtp_inbox_register_never_ask';
 
+/// Per-key "Keep private" (client parity): the offer's left
+/// button. `<prefix><inboxId>` = 'true', local, so that key's inbox is not
+/// offered again. The manual publish row is untouched by it.
+const String kInboxKeepPrivatePrefix = 'xmtp_inbox_keep_private:';
+
 Future<void> _maybeOfferInboxRegistration(
     BuildContext context, void Function(String) snack,
     {bool inTour = false}) async {
@@ -2448,6 +2537,17 @@ Future<void> _maybeOfferInboxRegistration(
 
   final inboxId = PublicOS.clientXmtpInboxId;
   if (inboxId == null || inboxId.isEmpty) return;
+
+  // The user already answered "Keep private" for this key.
+  final keepPrivateKey = kInboxKeepPrivatePrefix + inboxId;
+  if (!inTour) {
+    try {
+      final kept = await PublicOSSettings.getSetting(keepPrivateKey);
+      if (kept?.value == 'true') return;
+    } catch (_) {
+      // Unreadable: ask.
+    }
+  }
 
   try {
     if (await PublicOSXmtp.accountInboxIdExists(StringToBytes(inboxId))) return;
@@ -2485,8 +2585,24 @@ Future<void> _maybeOfferInboxRegistration(
     cta: context.l10n.keychainOfferRegPublish,
     initialLabel: defaultLabel,
     offerDontAsk: !inTour,
+    cancelLabel: context.l10n.keychainOfferRegKeepPrivate,
   );
   if (result == null) return;
+
+  // "Keep private" pressed: remember the no for this key.
+  if (!result.saved && !inTour) {
+    try {
+      await PublicOSSettings.setSetting(
+        keepPrivateKey,
+        Record.asSettings(
+          key: keepPrivateKey,
+          value: 'true',
+          isSystem: true,
+          isExpired: false,
+        ),
+      );
+    } catch (_) {}
+  }
 
   if (result.dontAskAgain) {
     try {
@@ -2547,7 +2663,7 @@ String? _sanitiseInboxLabel(String? raw) {
   return out.isEmpty ? null : out;
 }
 
-enum _XmtpSetupChoice { createFresh, restore }
+enum _XmtpSetupChoice { createFresh, restore, restoreSsp }
 
 /// Orchestrates loading a key into XMTP (the single gate every activation
 /// entry point funnels through).
@@ -2595,8 +2711,21 @@ Future<bool> _activateKeyForXmtp(
       if (!context.mounted) return false;
       return _setupFreshWithCapRecovery(context, userAddress, label);
     }
+    // Does the account's SSP hold a chat backup made with this key (the
+    // "Backup to SSP" row on the other device, kept 24 hours)? Then the
+    // dialog offers it. Any failure reads as "none": the other two options
+    // are still there. Twin of the client's.
+    PediaFile? sspBackup;
+    try {
+      sspBackup = await PublicOSKeychain.findChatBackup(userAddress, label)
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('KeychainDialog: [ACTIVATE] SSP backup lookup failed: $e');
+    }
+    debugPrint(
+        'KeychainDialog: [ACTIVATE] SSP backup = ${sspBackup?.id ?? "none"}');
     if (!context.mounted) return false;
-    final choice = await _showSetupChoiceDialog(context);
+    final choice = await _showSetupChoiceDialog(context, sspBackup: sspBackup);
     debugPrint(
         'KeychainDialog: [ACTIVATE] user chose: ${choice?.name ?? "cancel"}');
     switch (choice) {
@@ -2604,6 +2733,8 @@ Future<bool> _activateKeyForXmtp(
         return _setupFreshWithCapRecovery(context, userAddress, label);
       case _XmtpSetupChoice.restore:
         return _runRestoreBackup(context, userAddress, label);
+      case _XmtpSetupChoice.restoreSsp:
+        return _runRestoreFromSsp(context, userAddress, label, sspBackup!);
       case null:
         return false;
     }
@@ -2794,8 +2925,48 @@ Future<bool> _runRestoreBackup(
   }
 }
 
+/// Restore the chat backup the account's SSP holds for this key: the SAME
+/// installation as the device that made it, no slot burned, nothing to pick
+/// or paste. The server copy is left for its 24 hour timer.
+Future<bool> _runRestoreFromSsp(BuildContext context, String userAddress,
+    String label, PediaFile backup) async {
+  final l10n = context.l10n;
+  final overlay =
+      FullscreenOverlay.showBlocking(context, l10n.keychainRestoreSspWorking);
+  try {
+    final tmpDir = await getTemporaryDirectory();
+    await PublicOSKeychain.restoreChatBackup(
+        userAddress, label, backup, tmpDir.path);
+    debugPrint('KeychainDialog: [RESTORE-SSP] SUCCESS');
+    overlay.dismiss();
+    return true;
+  } catch (e, st) {
+    debugPrint('KeychainDialog: [RESTORE-SSP] FAILED: $e\n$st');
+    overlay.dismiss();
+    if (context.mounted) {
+      await _showSimpleDialog(
+          context,
+          l10n.keychainRestoreFailedTitle,
+          e is ChatBackupKeyException
+              ? l10n.keychainRestoreSspWrongKey
+              : e.toString());
+    }
+    return false;
+  }
+}
+
+/// When a chat backup was made, in the user's own time and language.
+String _backupWhen(BuildContext context, PediaFile backup) {
+  final made = DateTime.tryParse(backup.createdAt)?.toLocal();
+  if (made == null) return backup.createdAt;
+  final locale = Localizations.localeOf(context).toLanguageTag();
+  return DateFormat.MMMd(locale).add_Hm().format(made);
+}
+
 /// The create-vs-restore choice shown when a key is not set up here.
-Future<_XmtpSetupChoice?> _showSetupChoiceDialog(BuildContext context) {
+/// [sspBackup] adds the third option, restore from the user's SSP.
+Future<_XmtpSetupChoice?> _showSetupChoiceDialog(BuildContext context,
+    {PediaFile? sspBackup}) {
   return showDialog<_XmtpSetupChoice>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -2817,6 +2988,14 @@ Future<_XmtpSetupChoice?> _showSetupChoiceDialog(BuildContext context) {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text(ctx.l10n.keychainSetupRestoreDetail),
+            if (sspBackup != null) ...[
+              const SizedBox(height: 12),
+              Text(ctx.l10n.keychainSetupRestoreSsp,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(ctx.l10n.keychainSetupRestoreSspDetail(
+                  _backupWhen(ctx, sspBackup))),
+            ],
             const SizedBox(height: 16),
             // Guidance, not a third option. A key created moments ago still
             // lands here (create does not auto-activate in the onboarding
@@ -2843,6 +3022,11 @@ Future<_XmtpSetupChoice?> _showSetupChoiceDialog(BuildContext context) {
           onPressed: () => Navigator.pop(ctx, _XmtpSetupChoice.restore),
           child: Text(ctx.l10n.keychainSetupRestore),
         ),
+        if (sspBackup != null)
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _XmtpSetupChoice.restoreSsp),
+            child: Text(ctx.l10n.keychainSetupRestoreSsp),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, _XmtpSetupChoice.createFresh),
           child: Text(ctx.l10n.keychainSetupCreateFresh),

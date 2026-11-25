@@ -13,6 +13,8 @@ import 'package:publicos_desktop/widgets/feeds/emoji_picker_dialog.dart'
     show showEmojiPickerDialog;
 import 'package:publicos_desktop/widgets/feeds/reaction_quick_bar.dart'
     show ReactionPrefs;
+import 'package:publicos_desktop/widgets/transactions/quick_tip.dart'
+    show TipPrefs;
 import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 
@@ -208,6 +210,8 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
   bool _sigShimmer = true;
   int _sigSeconds = SignatureShimmerPrefs.defaultSeconds;
   String _doubleTap = ReactionPrefs.heart;
+  bool _quickTip = false;
+  double _myTip = TipPrefs.defaultAmount;
 
   /// The Settings page's accordion: one group open at a time, session-only.
   String? _openGroup = 'layout';
@@ -247,9 +251,13 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
       final sigShimmer = await SignatureShimmerPrefs.isEnabled();
       final sigSeconds = await SignatureShimmerPrefs.seconds();
       final doubleTap = await ReactionPrefs.doubleTapEmoji();
+      final quickTip = await TipPrefs.quickEnabled();
+      final myTip = await TipPrefs.amount();
       final landingRaw = await FeedsNavPrefs.landing();
       if (!mounted) return;
       setState(() {
+        _quickTip = quickTip;
+        _myTip = myTip;
         _landingRaw = landingRaw;
         _autoSignin = autoSignin;
         _videoMb = videoMb;
@@ -382,6 +390,17 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
     final s = v.round();
     setState(() => _sigSeconds = s);
     SignatureShimmerPrefs.setSeconds(s);
+  }
+
+  void _setQuickTip(bool on) {
+    setState(() => _quickTip = on);
+    TipPrefs.setQuickEnabled(on);
+  }
+
+  void _setMyTip(double cents) {
+    final v = cents.round() / 100;
+    setState(() => _myTip = v);
+    TipPrefs.setAmount(v);
   }
 
   Future<void> _pickDoubleTap() async {
@@ -598,6 +617,31 @@ class _FeedsSettingsViewState extends State<FeedsSettingsView> {
                           subtitle: context.l10n.feedsSettingsSheetDoubleTapHint,
                           emoji: _doubleTap,
                           onTap: _pickDoubleTap,
+                        ),
+                      ],
+                    ),
+                    _group(
+                      id: 'tips',
+                      icon: Icons.volunteer_activism_outlined,
+                      title: context.l10n.feedsSettingsSheetGroupTips,
+                      children: [
+                        _Slider(
+                          label: context.l10n.feedsSettingsSheetMyTipLabel,
+                          value: _myTip * 100,
+                          min: TipPrefs.minAmount * 100,
+                          max: TipPrefs.maxAmount * 100,
+                          divisions: 49,
+                          valueText: '${TipPrefs.format(_myTip)} OX',
+                          hint: context.l10n.feedsSettingsSheetMyTipHint,
+                          onChanged: _setMyTip,
+                        ),
+                        _SwitchRow(
+                          label: context.l10n.feedsSettingsSheetQuickTipLabel,
+                          subtitle: _quickTip
+                              ? context.l10n.feedsSettingsSheetQuickTipOn
+                              : context.l10n.feedsSettingsSheetQuickTipOff,
+                          value: _quickTip,
+                          onChanged: _setQuickTip,
                         ),
                       ],
                     ),

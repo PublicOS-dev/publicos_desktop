@@ -171,7 +171,10 @@ class _AddToListsSheetState extends State<_AddToListsSheet> {
           continue;
         }
         final match =
-            feeds.where((f) => f.feedUrl == widget.feedUrl).firstOrNull;
+            feeds
+                .where((f) =>
+                    feedUrlKey(f.feedUrl) == feedUrlKey(widget.feedUrl))
+                .firstOrNull;
         initial[list.id] = match != null;
         if (match != null) _feedIdInList[list.id] = match.id;
       }

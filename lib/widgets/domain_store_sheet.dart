@@ -491,6 +491,13 @@ class _DomainStoreSheetState extends State<_DomainStoreSheet> {
                               _query.isNotEmpty ? _searchedContact : _selfContact,
                           name: _query.isNotEmpty ? _query : _ownName,
                           searching: _searching,
+                          // A searched name that is taken: the card is its
+                          // holder, and opens them (the searcher may want to
+                          // get in touch). Not in
+                          // onboarding, where the sheet has one job.
+                          opensProfile: _query.isNotEmpty &&
+                              _searchedContact != null &&
+                              !widget.closeOnPaid,
                         ),
                         // Always shown — an empty box reads as "this is your name"
                         // (same as typing your current name).
@@ -1475,10 +1482,14 @@ class _StoreCard extends StatelessWidget {
   /// — the search is resolving this name on-chain.
   final bool searching;
 
+  /// Avatar and name open [contact]'s profile.
+  final bool opensProfile;
+
   const _StoreCard({
     required this.contact,
     required this.name,
     this.searching = false,
+    this.opensProfile = false,
   });
 
   @override
@@ -1526,24 +1537,28 @@ class _StoreCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       GlassContactIcon(
+                        opensProfile: opensProfile,
                         contact: contact,
                         address: addr,
                         size: 60,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          name.isEmpty ? '—' : name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: tokens.starkWhite,
-                            shadows: const [
-                              Shadow(color: Colors.black54, blurRadius: 6),
-                            ],
+                        child: ContactProfileTap(
+                          contact: opensProfile ? contact : null,
+                          child: Text(
+                            name.isEmpty ? '—' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                              color: tokens.starkWhite,
+                              shadows: const [
+                                Shadow(color: Colors.black54, blurRadius: 6),
+                              ],
+                            ),
                           ),
                         ),
                       ),

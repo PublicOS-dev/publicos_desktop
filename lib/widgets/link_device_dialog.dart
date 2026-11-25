@@ -706,6 +706,11 @@ class _LinkDeviceDialogState extends State<_LinkDeviceDialog> {
     if (counting) {
       final mins = (_remainingSec ~/ 60).clamp(0, 9999);
       final secs = (_remainingSec % 60).clamp(0, 59);
+      // An hour or more reads as hours: the claim-page QR lives 3 hours, and
+      // '179:59' crowded the button. Under an hour, mm:ss.
+      final left = _remainingSec >= 3600
+          ? '${_remainingSec ~/ 3600}h ${((_remainingSec % 3600) ~/ 60).toString().padLeft(2, '0')}m'
+          : '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
       final stale = _remainingSec <= 60;
       final color = stale ? tokens.fallbackAccent : tokens.connectedAccent;
       // Same button shape/place as the sign/signing states (disabled, tinted
@@ -725,14 +730,13 @@ class _LinkDeviceDialogState extends State<_LinkDeviceDialog> {
           children: [
             Icon(Icons.schedule_rounded, color: color, size: 16),
             const SizedBox(width: 8),
-            // "QR expires in mm:ss". Half the dialog's
+            // "QR expires in mm:ss" ("2h 59m" from an hour up). Half the dialog's
             // width, so it shrinks rather than overflows on a narrow phone.
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  context.l10n.linkDeviceDialogQrExpiresIn(
-                      '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}'),
+                  context.l10n.linkDeviceDialogQrExpiresIn(left),
                   maxLines: 1,
                   style: TextStyle(
                     color: color,

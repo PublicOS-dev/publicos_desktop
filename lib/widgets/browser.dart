@@ -7,9 +7,12 @@ import 'package:publicos_core/publicos_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zero_cached_image/zero_cached_image.dart';
 
+import 'package:publicos_desktop/widgets/star_button.dart';
 import 'package:publicos_desktop/l10n/app_localizations.dart';
 import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/router.dart';
+import 'package:publicos_desktop/widgets/chat_no_key_state.dart';
+import 'package:publicos_desktop/widgets/keychain_dialog.dart';
 import 'package:publicos_desktop/screens/chat_screen.dart';
 import 'package:publicos_desktop/screens/contact_settings_screen.dart';
 import 'package:publicos_desktop/screens/profile_pane.dart';
@@ -1762,7 +1765,7 @@ class _BrowserState extends State<Browser>
       var inAny = false;
       for (final list in await PublicOSFeedLists.getUserLists()) {
         final feeds = await PublicOSFeedLists.getFeedsInList(list.id);
-        if (feeds.any((f) => f.feedUrl == url)) {
+        if (feeds.any((f) => feedUrlKey(f.feedUrl) == feedUrlKey(url))) {
           inAny = true;
           break;
         }
@@ -1870,6 +1873,17 @@ class _BrowserState extends State<Browser>
   /// channels are different acts, and only the former lights this up.
   bool _isFollowingAccount = false;
 
+  /// Is this account STARRED (client twin)? A starred contact is
+  /// one the user gets chain notifications about.
+  bool _isStarred = false;
+
+  /// Offered on another account's profile; never on the user's own, never on
+  /// the publicos org (always starred, no toggle).
+  bool get _starShown =>
+      widget.contact.publicosAddress != null &&
+      !_isSelf &&
+      !PublicOSContacts.isAlwaysStarred(widget.contact.publicosAddress!);
+
   /// Re-entry guard for the follow tap. No spinner — the sheet is the only
   /// writer and every write is local DB, so the icon just flips when it lands.
   bool _togglingAccountFollow = false;
@@ -1882,7 +1896,35 @@ class _BrowserState extends State<Browser>
   /// Re-read whether the viewer follows this account. Cheap indexed lookup;
   /// called on init, on contact change, and after a follow/unfollow. Self and
   /// address-less profiles are never "followed".
+  /// Re-read the star. Runs with the follow read, so it follows the same
+  /// lifecycle (init, contact change).
+  Future<void> _refreshStarState() async {
+    final account = widget.contact.publicosAddress;
+    var starred = false;
+    if (account != null && !_isSelf) {
+      try {
+        starred = await PublicOSContacts.isStarred(account);
+      } catch (_) {}
+    }
+    if (mounted && starred != _isStarred) setState(() => _isStarred = starred);
+  }
+
+  /// Star or un-star this account. A profile that is not a stored contact yet
+  /// is saved by the same call.
+  Future<void> _toggleStarCurrentAccount() async {
+    if (!_starShown) return;
+    final next = !_isStarred;
+    setState(() => _isStarred = next); // the button answers at once
+    try {
+      final now = await PublicOSContacts.setStarred(widget.contact, next);
+      if (mounted && now != _isStarred) setState(() => _isStarred = now);
+    } catch (_) {
+      if (mounted) setState(() => _isStarred = !next);
+    }
+  }
+
   Future<void> _refreshAccountFollowState() async {
+    _refreshStarState();
     final addr = widget.contact.publicosAddress?.eip55With0x;
     final session = PublicOS.sessionBlockchainAddress;
     if (addr == null || session == null || _isSelf) {
@@ -2235,8 +2277,32 @@ class _BrowserState extends State<Browser>
                   ),
                 ),
                 _deckSlot(
-                  // Follow the ACCOUNT. Only a real on-chain account that
-                  // isn't you: XMTP-only contacts have no address to follow.
+                  // Star, left of the follow button: fills
+                  // yellow with a bounce and a few confetti when turned on.
+                  // Edit stays inline here: the deck has the width, and no
+                  // "…" menu to move it into (that is a phone rule).
+                  visible: onProfile && _starShown,
+                  build: () => Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                    child: Tooltip(
+                      message: context.l10n.browserStarTooltip,
+                      child: StarButton(
+                        starred: _isStarred,
+                        onTap: _toggleStarCurrentAccount,
+                        idleColor: GlassPill.fgAt(pal.fgDim, dock),
+                        pill: (glyph) => GlassPill(
+                          dock: dock,
+                          radius: BorderRadius.circular(8),
+                          child: glyph,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _deckSlot(
+                  // Follow the ACCOUNT — moved here from the profile body
+                  // Only a real on-chain account that isn't you:
+                  // XMTP-only contacts have no address to follow.
                   visible: onProfile &&
                       widget.contact.publicosAddress != null &&
                       !_isSelf,
@@ -2836,13 +2902,25 @@ class _BrowserState extends State<Browser>
         // _initialize() re-resolves the (new key ↔ peer) DM topic; groups pass
         // inboxId null and ride the contact's topic. Chat is collapsed-family:
         // the _body branch pads it below the strip.
-        return SimpleChatScreen(
-          key: ValueKey('chat:${tab.inboxId}:${PublicOS.clientXmtpInboxId}'),
-          contact: widget.contact,
-          inboxId: _isGroup ? null : tab.inboxId,
-          topic: widget.topic,
-          onActiveKeyChanged: widget.onActiveKeyChanged,
-          onChatSettingsAvailable: _onChatSettingsAvailable,
+        //
+        // No inbox loaded: the chat is not built at all (it
+        // threw a red error resolving a topic against no inbox); a "load a
+        // key" tile stands in. `xmtpKeyEpoch` rebuilds this branch when a key
+        // is loaded or switched from the status bar, so the chat mounts (or
+        // remounts on the new inbox) by itself.
+        return ValueListenableBuilder<int>(
+          valueListenable: xmtpKeyEpoch,
+          builder: (context, _, __) => PublicOS.clientXmtpInboxId == null
+              ? ChatNoKeyState(onLoadKeys: _loadKeysForChat)
+              : SimpleChatScreen(
+                  key: ValueKey(
+                      'chat:${tab.inboxId}:${PublicOS.clientXmtpInboxId}'),
+                  contact: widget.contact,
+                  inboxId: _isGroup ? null : tab.inboxId,
+                  topic: widget.topic,
+                  onActiveKeyChanged: widget.onActiveKeyChanged,
+                  onChatSettingsAvailable: _onChatSettingsAvailable,
+                ),
         );
 
       case _TabKind.feeds:
@@ -3546,6 +3624,17 @@ class _BrowserState extends State<Browser>
   /// SimpleChatScreen publishes/retracts its conversation-settings opener as
   /// topics resolve; it can fire during build, so defer the setState. Method
   /// tear-offs of the same State compare equal — dedupe to avoid loops.
+  /// The no-key tile's action: the keychain, then the chat if an inbox was
+  /// loaded there.
+  Future<void> _loadKeysForChat() async {
+    final before = PublicOS.clientXmtpInboxId;
+    await showKeychainDialog(context,
+        myContact: AppStateNotifier.currentMyContact);
+    if (PublicOS.clientXmtpInboxId == before) return;
+    xmtpKeyEpoch.value++;
+    widget.onActiveKeyChanged?.call();
+  }
+
   void _onChatSettingsAvailable(VoidCallback? opener) {
     if (_chatSettingsOpener == opener) {
       debugPrint('[browser] chat settings opener unchanged '

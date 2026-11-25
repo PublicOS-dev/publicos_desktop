@@ -860,7 +860,7 @@ class _SettingsPaneState extends State<SettingsPane> {
       tokens,
       id: 'appearance',
       icon: Icons.palette_outlined,
-      title: 'Appearance',
+      title: context.l10n.desktopSettingsAppearanceTitle,
       children: [
         // Device-local (ShellPrefs / SharedPreferences, like theme_mode) —
         // window-chrome layout, not an account setting.
@@ -935,7 +935,7 @@ class _SettingsPaneState extends State<SettingsPane> {
             ),
             _choiceChip(
               tokens,
-              context.l10n.languageName,
+              'English',
               currentCode == 'en',
               () => _setLocale('en'),
             ),
@@ -963,7 +963,7 @@ class _SettingsPaneState extends State<SettingsPane> {
       tokens,
       id: 'notifications',
       icon: Icons.notifications_outlined,
-      title: 'Notifications',
+      title: context.l10n.appSettingsPageNotificationsTitle,
       children: [
         _toggleRow(
           tokens,
@@ -989,7 +989,7 @@ class _SettingsPaneState extends State<SettingsPane> {
       tokens,
       id: 'session',
       icon: Icons.login_rounded,
-      title: 'Session',
+      title: context.l10n.appSettingsPageSessionTitle,
       children: [
         _toggleRow(
           tokens,
@@ -1007,7 +1007,7 @@ class _SettingsPaneState extends State<SettingsPane> {
       tokens,
       id: 'blockchain',
       icon: Icons.link_rounded,
-      title: 'Blockchain',
+      title: context.l10n.appSettingsPageBlockchainTitle,
       children: [
         _tile(
           tokens,
@@ -1046,7 +1046,7 @@ class _SettingsPaneState extends State<SettingsPane> {
       tokens,
       id: 'avatars',
       icon: Icons.auto_awesome,
-      title: 'NFT avatars',
+      title: context.l10n.appSettingsPageAvatarTitle,
       children: [
         Text(
           context.l10n.appSettingsPageAvatarDesc,

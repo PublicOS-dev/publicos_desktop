@@ -477,7 +477,8 @@ class FeedsPaneState extends State<FeedsPane> {
           final records =
               await PublicOSContacts.getRecordsByType(RecordType.router);
           for (final r in records) {
-            if (r.routerSubtype == RouterSubtype.channel && r.value == url) {
+            if (r.routerSubtype == RouterSubtype.channel &&
+                feedUrlKey(r.value) == feedUrlKey(url)) {
               tabKey = r.key;
               break;
             }
@@ -705,7 +706,7 @@ class FeedsPaneState extends State<FeedsPane> {
     try {
       for (final list in await PublicOSFeedLists.getUserLists()) {
         final feeds = await PublicOSFeedLists.getFeedsInList(list.id);
-        if (feeds.any((f) => f.feedUrl == url)) {
+        if (feeds.any((f) => feedUrlKey(f.feedUrl) == feedUrlKey(url))) {
           inAnyList = true;
           break;
         }
@@ -1378,6 +1379,16 @@ class FeedsPaneState extends State<FeedsPane> {
         showFullScreenLoader: false,
         refreshTick: _exploreRefreshTick,
         onLoadingChanged: _onPostsLoadingChanged,
+        // Explore loads like a feed: the hint and Latest's "N new" chip go
+        // to the same header slots a list uses.
+        onHeldDocked: (w) {
+          if (!mounted) return;
+          setState(() => _dockedNewChip = w);
+        },
+        onRefreshingChanged: (v) {
+          if (!mounted || _postsRefreshing == v) return;
+          setState(() => _postsRefreshing = v);
+        },
       );
     }
     if (_isViewingBookmarks) {
@@ -1728,7 +1739,19 @@ class FeedsPaneState extends State<FeedsPane> {
               side: BorderSide(color: tokens.borderSubtle),
             ),
             onSelected: (v) {
-              if (v == 'copy') _copyFeedUrl(feed.url);
+              // Share copies what we hold (post_identity): the tab's
+              // publicos.dev link when this feed is read through a profile's
+              // tab, else the feed's own address.
+              if (v == 'copy') {
+                final at = feed.effectiveFoundAtAddress;
+                final key = feed.recordKey;
+                _copyFeedUrl(at != null &&
+                        at.isNotEmpty &&
+                        key != null &&
+                        key.isNotEmpty
+                    ? tabShareLink(foundAtAddress: at, tabKey: key)
+                    : feed.url);
+              }
             },
             itemBuilder: (_) => [
               PopupMenuItem<String>(

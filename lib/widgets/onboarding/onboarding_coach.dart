@@ -59,11 +59,27 @@ class CoachMark {
   /// Extra breathing room around the target's rect, in logical pixels.
   final double padding;
 
+  /// A second control to put in the same hole: the spotlight is the union of
+  /// both rects. For a beat that talks about two neighbours at once (the
+  /// keychain's title and its session key). Ignored while it is not laid out.
+  final GlobalKey? alsoKey;
+
+  /// Set on a beat that only EXPLAINS. Nothing is tappable then, the hole
+  /// included, and a tap anywhere calls this. Null on a doing beat, which
+  /// advances when the real control's real action lands.
+  final VoidCallback? onContinue;
+
+  /// The small "tap to continue" line under [text] on an explaining beat.
+  final String? continueLabel;
+
   const CoachMark({
     required this.targetKey,
     required this.text,
     this.side = CoachSide.below,
     this.padding = 6,
+    this.alsoKey,
+    this.onContinue,
+    this.continueLabel,
   });
 }
 
@@ -302,15 +318,14 @@ class _CoachOverlayState extends State<CoachOverlay>
     final covered = !(_targetRoute?.isCurrent ?? true);
 
     final origin = box.localToGlobal(Offset.zero);
-    _apply(
-      Rect.fromLTWH(
-        origin.dx - mark.padding,
-        origin.dy - mark.padding,
-        box.size.width + mark.padding * 2,
-        box.size.height + mark.padding * 2,
-      ),
-      covered,
-    );
+    var rect = origin & box.size;
+    final alsoBox =
+        mark.alsoKey?.currentContext?.findRenderObject() as RenderBox?;
+    if (alsoBox != null && alsoBox.hasSize) {
+      rect = rect.expandToInclude(
+          alsoBox.localToGlobal(Offset.zero) & alsoBox.size);
+    }
+    _apply(rect.inflate(mark.padding), covered);
   }
 
   /// One setState for both facts, and only when one of them actually moved —
@@ -388,7 +403,7 @@ class _CoachOverlayState extends State<CoachOverlay>
 
         // The absorbing layer: four boxes around the hole. The hole itself is
         // covered by none of them, so the tap lands on the real control.
-        ..._absorbers(screen, rect),
+        ..._absorbers(screen, rect, mark?.onContinue),
 
         // The pulsing ring on the target.
         Positioned.fromRect(
@@ -429,7 +444,11 @@ class _CoachOverlayState extends State<CoachOverlay>
 
   /// Four boxes around the hole. Written as explicit rects rather than a
   /// clever clip because hit-testing has to agree with them exactly.
-  List<Widget> _absorbers(Size screen, Rect hole) {
+  ///
+  /// On an explaining beat ([onContinue] set) a fifth box covers the hole too,
+  /// and every box calls [onContinue]: the beat has nothing to do, only to
+  /// read, so a tap anywhere moves on.
+  List<Widget> _absorbers(Size screen, Rect hole, VoidCallback? onContinue) {
     Widget box(double l, double t, double w, double h) => Positioned(
           left: l,
           top: t,
@@ -439,7 +458,7 @@ class _CoachOverlayState extends State<CoachOverlay>
           // outside the spotlight can be reached, not that taps are counted.
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {},
+            onTap: onContinue ?? () {},
             child: const SizedBox.expand(),
           ),
         );
@@ -448,6 +467,7 @@ class _CoachOverlayState extends State<CoachOverlay>
       box(0, hole.bottom, screen.width, screen.height - hole.bottom),
       box(0, hole.top, hole.left, hole.height),
       box(hole.right, hole.top, screen.width - hole.right, hole.height),
+      if (onContinue != null) box(hole.left, hole.top, hole.width, hole.height),
     ];
   }
 
@@ -511,16 +531,34 @@ class _CoachOverlayState extends State<CoachOverlay>
                     alignment: Alignment.topLeft,
                     children: [...previous, if (current != null) current],
                   ),
-                  child: Text.rich(
+                  child: Column(
                     key: ValueKey(mark.text),
-                    TextSpan(children: coachBoldSpans(mark.text, tokens)),
-                    style: TextStyle(
-                      fontFamily: 'SpaceGrotesk',
-                      fontSize: 14,
-                      height: 1.5,
-                      color: tokens.starkWhite,
-                      decoration: TextDecoration.none,
-                    ),
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        TextSpan(children: coachBoldSpans(mark.text, tokens)),
+                        style: TextStyle(
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 14,
+                          height: 1.5,
+                          color: tokens.starkWhite,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                      if (mark.continueLabel != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          mark.continueLabel!,
+                          style: TextStyle(
+                            fontFamily: 'SpaceGrotesk',
+                            fontSize: 12,
+                            color: tokens.textDim,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),

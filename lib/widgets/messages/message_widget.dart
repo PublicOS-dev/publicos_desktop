@@ -969,14 +969,14 @@ class _MessageWidgetState extends State<MessageWidget>
     return Row(
       children: [
         if (contact != null)
-          GlassContactIcon(contact: contact, size: 38)
+          GlassContactIcon(opensProfile: true, contact: contact, size: 38)
         else if (hasAddr)
-          GlassContactIcon(address: address!, size: 38)
+          GlassContactIcon(opensProfile: true, address: address!, size: 38)
         else
           const SizedBox(width: 38, height: 38),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
+          child: ContactProfileTap(contact: contact, address: address, child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1006,7 +1006,7 @@ class _MessageWidgetState extends State<MessageWidget>
                   },
                 ),
             ],
-          ),
+          )),
         ),
       ],
     );

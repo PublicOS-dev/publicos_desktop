@@ -444,7 +444,7 @@ class _AddressEntryBarState extends State<_AddressEntryBar> {
 
   bool get _canSubmit {
     if (_submitting) return false;
-    return _addressCtrl.text.trim().length >= 2;
+    return _addressCtrl.text.trim().isNotEmpty; // 1 char is a real name
   }
 
   Future<void> _submit() async {
@@ -679,7 +679,7 @@ class _ModEntryRowState extends State<_ModEntryRow> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _openProfile, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -723,7 +723,7 @@ class _ModEntryRowState extends State<_ModEntryRow> {
                   ExpirationChip(value: widget.expiresAt!),
                 ],
               ],
-            ),
+            )),
           ),
           const SizedBox(width: 8),
           IconButton(
@@ -1784,7 +1784,7 @@ class _RequestRowState extends State<_RequestRow> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _openProfile, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -1818,7 +1818,7 @@ class _RequestRowState extends State<_RequestRow> {
                   ),
                 ],
               ],
-            ),
+            )),
           ),
           const SizedBox(width: 8),
           if (widget.processing)

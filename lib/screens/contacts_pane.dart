@@ -108,6 +108,12 @@ class _ContactsPaneState extends State<ContactsPane> {
   // client's two toggles.
   bool _showPersonal = true;
   bool _showOrgs = true;
+
+  /// The Starred chip (client twin): on = only starred contacts,
+  /// the ones the user gets chain notifications about; off = every stored
+  /// contact. On by default, kept on the device under [_starredOnlyKey].
+  bool _starredOnly = true;
+  static const String _starredOnlyKey = 'contacts_starred_only';
   bool _sortAsc = true;
   String _query = '';
   final TextEditingController _searchCtrl = TextEditingController();
@@ -170,7 +176,33 @@ class _ContactsPaneState extends State<ContactsPane> {
       if (layout != null) _layout = layout;
       if (showBanner != null) _showBanner = showBanner;
     });
+    try {
+      final rec = await PublicOSSettings.getSetting(_starredOnlyKey);
+      if (rec != null && mounted) {
+        setState(() => _starredOnly = rec.value != 'false');
+      }
+    } catch (_) {}
   }
+
+  void _setStarredOnly(bool value) {
+    if (_starredOnly == value) return;
+    setState(() => _starredOnly = value);
+    () async {
+      try {
+        await PublicOSSettings.setSetting(
+          _starredOnlyKey,
+          Record.asSettings(
+              key: _starredOnlyKey, value: value.toString(), isSystem: true),
+        );
+      } catch (_) {}
+    }();
+  }
+
+  /// Starred, or the publicos org (always starred, no toggle).
+  bool _isStarred(Contact c) =>
+      c.bookmarked == true ||
+      (c.publicosAddress != null &&
+          PublicOSContacts.isAlwaysStarred(c.publicosAddress!));
 
   /// Client-verbatim (`contacts_view._openSettings`). The sheet itself is the
   /// 0-delta mirror in `widgets/grid_settings_sheet.dart`.
@@ -366,6 +398,12 @@ class _ContactsPaneState extends State<ContactsPane> {
   List<Contact> get _filteredContacts {
     Iterable<Contact> view = _all;
 
+    // The Starred chip narrows the LIST only. A search looks through every
+    // stored contact, as it always has.
+    if (_starredOnly && _query.trim().isEmpty) {
+      view = view.where(_isStarred);
+    }
+
     if (!_showPersonal || !_showOrgs) {
       view = view.where((c) {
         final isOrg = c.isOrgAccount;
@@ -505,6 +543,25 @@ class _ContactsPaneState extends State<ContactsPane> {
             icon: Icons.copy_rounded,
             label: context.l10n.postCardCopyLink,
             onTap: () => _copyContactLink(address),
+          ),
+        // Star: this contact raises chain notifications. Not offered for the
+        // publicos org, which is always starred.
+        if (contact.publicosAddress != null &&
+            !PublicOSContacts.isAlwaysStarred(contact.publicosAddress!))
+          GlassContextMenuItem(
+            icon: contact.bookmarked == true
+                ? Icons.star_rounded
+                : Icons.star_border_rounded,
+            label: contact.bookmarked == true
+                ? context.l10n.contactsViewUnstar
+                : context.l10n.contactsViewStar,
+            onTap: () async {
+              try {
+                await PublicOSContacts.setStarred(
+                    contact, contact.bookmarked != true);
+              } catch (_) {}
+              if (mounted) await _loadContacts(showSpinner: false);
+            },
           ),
         GlassContextMenuItem(
           icon: Icons.delete_outline_rounded,
@@ -760,6 +817,13 @@ class _ContactsPaneState extends State<ContactsPane> {
     return ExplorerChipBar(
       children: [
         ExplorerChip(
+          label: context.l10n.contactsViewFilterStarred,
+          icon: _starredOnly ? Icons.star_rounded : Icons.star_border_rounded,
+          active: _starredOnly,
+          onTap: () => _setStarredOnly(!_starredOnly),
+        ),
+        const SizedBox(width: 16),
+        ExplorerChip(
           label: context.l10n.contactsViewFilterPersonal,
           icon: Icons.person_outline_rounded,
           active: _showPersonal,
@@ -832,7 +896,10 @@ class _ContactsPaneState extends State<ContactsPane> {
             : context.l10n.contactsViewNoContactsYet,
         body: hasQuery
             ? context.l10n.contactsViewNoMatchesHint
-            : context.l10n.contactsViewEmptyHint,
+            // Contacts exist, none starred, and the chip is on.
+            : (_starredOnly && _all.isNotEmpty)
+                ? context.l10n.contactsViewNoStarred
+                : context.l10n.contactsViewEmptyHint,
       );
     }
     if (_layout == ContactsLayout.rows) {

@@ -20,6 +20,9 @@ Future<List<ActivityEvent>> pullSocialInbox({
 }) async {
   final prefs = await SharedPreferences.getInstance();
   final key = '$_cursorPrefix${account.toLowerCase()}';
+  if (!prefs.containsKey(key)) {
+    return _firstInboxPull(prefs: prefs, key: key, home: home);
+  }
   final after = prefs.getInt(key) ?? 0;
   final page = await PublicOSPush.listNotifications(
     after: after,
@@ -32,6 +35,52 @@ Future<List<ActivityEvent>> pullSocialInbox({
     if (await PublicOSActivity.storeIfNew(ev)) fresh.add(ev);
   }
   if (page.next > after) await prefs.setInt(key, page.next);
+  return fresh;
+}
+
+/// How many of the newest rows a device's first pull leaves unread.
+const firstPullUnread = 3;
+
+/// The FIRST pull of an account's inbox on this device (no cursor stored):
+/// the whole inbox goes into the list, but only the newest [firstPullUnread]
+/// rows stay unread and only those are returned as new (a new install must
+/// not replay every old notification as unread), so they see where they
+/// left off. Everything older is
+/// stored already read. The rule is here, in the pull, so it holds for
+/// whichever caller reaches a new install first.
+///
+/// The cursor is written only after every page was read and stored: a failed
+/// page throws, nothing is marked done, and the next call starts over (the
+/// store ignores rows it already has).
+Future<List<ActivityEvent>> _firstInboxPull({
+  required SharedPreferences prefs,
+  required String key,
+  required String home,
+}) async {
+  final all = <ActivityEvent>[];
+  var after = 0;
+  for (var pages = 0; pages < 200; pages++) {
+    final page = await PublicOSPush.listNotifications(
+      after: after,
+      limit: 100,
+      serverAddress: home,
+    );
+    for (final n in page.items) {
+      all.add(ActivityEvent.social(n.toPushData()));
+    }
+    if (page.items.isEmpty || page.next <= after) break;
+    after = page.next;
+  }
+  all.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  final fresh = <ActivityEvent>[];
+  for (var i = 0; i < all.length; i++) {
+    final keep = i < firstPullUnread;
+    final isNew = await PublicOSActivity.storeIfNew(all[i], read: !keep);
+    if (isNew && keep) fresh.add(all[i]);
+  }
+  await prefs.setInt(key, after);
+  debugPrint('[social] first inbox pull: ${all.length} stored, '
+      '${fresh.length} left unread');
   return fresh;
 }
 

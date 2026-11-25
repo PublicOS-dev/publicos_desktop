@@ -566,6 +566,66 @@ class AppLocalizationsEn extends AppLocalizations {
       'An unexpected error occurred during initialization. Please try again.';
 
   @override
+  String get lockNoLockTitle => 'Windows Hello is not set up on this computer';
+
+  @override
+  String get lockNoLockBody =>
+      'PublicOS holds the keys to your accounts. We strongly recommend setting up Windows Hello (a PIN, fingerprint or face) on this computer.\n\nIf you would rather not, you need to set a 6-digit PIN for PublicOS.';
+
+  @override
+  String get lockOpenSettings => 'OPEN WINDOWS SETTINGS';
+
+  @override
+  String get lockIHaveSetLock => 'I SET UP WINDOWS HELLO';
+
+  @override
+  String get lockSetPinInstead => 'SET A PIN INSTEAD';
+
+  @override
+  String get lockSetPinTitle => 'Choose a 6-digit PIN';
+
+  @override
+  String get lockSetPinBody =>
+      'You will type it every time PublicOS opens.\n\nAfter 10 wrong tries PublicOS locks. If it locks, or you forget the PIN, the only way back in is to reset PublicOS on this computer.';
+
+  @override
+  String get lockConfirmPinTitle => 'Type the PIN again';
+
+  @override
+  String get lockPinMismatch => 'The two PINs do not match. Start again.';
+
+  @override
+  String get lockEnterPinTitle => 'Type your PIN';
+
+  @override
+  String lockWrongPin(int count) {
+    return 'Wrong PIN. Tries left: $count.';
+  }
+
+  @override
+  String get lockForgotPin => 'FORGOT PIN';
+
+  @override
+  String get lockLockedTitle => 'PublicOS is locked';
+
+  @override
+  String get lockLockedBody =>
+      'Too many wrong tries. The only way back in is to reset PublicOS on this computer.';
+
+  @override
+  String get lockResetButton => 'RESET PUBLICOS ON THIS COMPUTER';
+
+  @override
+  String get lockResetTitle => 'Reset PublicOS on this computer?';
+
+  @override
+  String get lockResetBody =>
+      'This deletes everything PublicOS keeps on this computer: your keys, messages and settings. It cannot be undone. PublicOS closes when it is done.\n\nYour accounts are not deleted. You get back into them the same way you would on a new computer. If this computer holds the only key to an account and you have no backup of it, you lose access to that account.';
+
+  @override
+  String get lockResetConfirm => 'RESET';
+
+  @override
   String get onbPublicosTitle => 'PublicOS';
 
   @override
@@ -889,7 +949,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onbCoachGenerate =>
-      '**Generate** a key. It is made on this device and stored nowhere else.';
+      'Your messages arrive in an **inbox** outside, and an inbox has its own lock. You can put up as many inboxes as you like. Let\'s cut the key for your first one.';
+
+  @override
+  String get onbCoachHouse =>
+      'This is your **keychain**. Think of your account as your house. You already have the key to the front door: it\'s the one marked **SESSION**.';
+
+  @override
+  String get onbCoachContinue => 'Tap anywhere to continue';
 
   @override
   String get onbCoachSim =>
@@ -1381,6 +1448,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Key deleted. Messaging is off until you pick a key.';
 
   @override
+  String get keychainKeyUnloaded =>
+      'Key unloaded. Messaging is off until you load a key.';
+
+  @override
   String get keychainAddressCopied => 'Address copied to clipboard';
 
   @override
@@ -1463,7 +1534,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get keychainOfferRegLabel => 'Tab name';
 
   @override
-  String get keychainOfferRegDontAsk => 'Don\'t ask again';
+  String get keychainOfferRegDontAsk => 'Don\'t suggest again for any key';
+
+  @override
+  String get keychainOfferRegKeepPrivate => 'Keep private';
 
   @override
   String get keychainOfferRegPublish => 'PUBLISH';
@@ -1870,6 +1944,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get walletActivityTitle => 'Activity';
+
+  @override
+  String get walletWatchOnlyCantSign =>
+      'Watch-only wallet: this device doesn\'t hold its key, so it can\'t sign.';
 
   @override
   String get walletActivityEmpty =>
@@ -5126,6 +5204,30 @@ class AppLocalizationsEn extends AppLocalizations {
       'The reaction a double tap on a post adds. Tap to choose.';
 
   @override
+  String get feedsSettingsSheetGroupTips => 'Tips';
+
+  @override
+  String get feedsSettingsSheetMyTipLabel => 'MY TIP';
+
+  @override
+  String get feedsSettingsSheetMyTipHint =>
+      'Preselected when you tip a post, and what a long press on the tip button sends.';
+
+  @override
+  String get feedsSettingsSheetQuickTipLabel => 'LONG PRESS TO TIP';
+
+  @override
+  String get feedsSettingsSheetQuickTipOn =>
+      'On: hold the tip button to send your tip to the author from your main wallet. Tap again while the ring fills to cancel.';
+
+  @override
+  String get feedsSettingsSheetQuickTipOff =>
+      'Off: the tip button always opens the tip sheet.';
+
+  @override
+  String get quickTipFailed => 'The tip didn\'t go through.';
+
+  @override
   String get feedsSettingsSheetGroupSignature => 'Signature';
 
   @override
@@ -5811,6 +5913,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postCardFeedContextOn => 'on';
+
+  @override
+  String get postCardFeedContextIn => 'in';
 
   @override
   String feedReaderPageUpdated(String ago) {
@@ -6591,6 +6696,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get messagesSettingsSheetBackupFailed => 'Backup failed.';
+
+  @override
+  String get messagesSettingsSheetSspBackupLabel => 'Backup to SSP';
+
+  @override
+  String get messagesSettingsSheetSspBackupSubtitle =>
+      'A copy on your server for 24 hours, to move your chats to another device';
+
+  @override
+  String get messagesSettingsSheetSspBackupWarning =>
+      'This is a short-lived backup. It is held on your server for 24 hours and deleted after that. Messages after this moment are not part of it.\n\nIf you want a long-lived copy, download the database with the other option.';
+
+  @override
+  String get messagesSettingsSheetSspBackupWorking =>
+      'Backing up to your SSP…\n\nThis might take 1 to 2 minutes. Do not leave this screen.';
+
+  @override
+  String get messagesSettingsSheetSspBackupDoneTitle => 'Backup done';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactInbox => 'Inbox';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactKey => 'Key';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactSize => 'Size';
+
+  @override
+  String get messagesSettingsSheetSspBackupFactDeleted => 'Deleted on';
+
+  @override
+  String get messagesSettingsSheetSspBackupDone =>
+      'Backup made. Your server deletes it in 24 hours.';
+
+  @override
+  String get messagesSettingsSheetSspBackupTooLarge =>
+      'Your chat database is over 100 MB, too large for this backup. Download the database with the other option.';
+
+  @override
+  String messagesSettingsSheetSspBackupNoSpace(int need, int free) {
+    return 'Not enough space on your server: the backup needs $need MB and $free MB are free.';
+  }
+
+  @override
+  String get keychainSetupRestoreSsp => 'Restore from your SSP';
+
+  @override
+  String keychainSetupRestoreSspDetail(String when) {
+    return 'Your server holds a backup of this key\'s chats, made $when. Keeps your message history and does not use a device slot.';
+  }
+
+  @override
+  String get keychainRestoreSspWorking =>
+      'Restoring your chats…\n\nDo not close the app.';
+
+  @override
+  String get keychainRestoreSspWrongKey => 'This key did not make that backup.';
+
+  @override
+  String get keychainDeleteChatsTitle => 'Delete chats too?';
+
+  @override
+  String keychainDeleteChatsBody(String inbox) {
+    return 'Also delete the chats and XMTP data on this device for this key and inbox \"$inbox\"?\n\nThe same key under another label will also lose them. Without a backup they cannot be brought back.';
+  }
+
+  @override
+  String get keychainDeleteChatsKeep => 'Keep chats';
+
+  @override
+  String get keychainDeleteChatsDelete => 'Delete chats';
 
   @override
   String get messagesSettingsSheetBackupFileTypeLabel => 'PublicOS XMTP backup';
@@ -9026,6 +9203,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Notifications for on-chain events';
 
   @override
+  String get appSettingsPageNotifsNotArrivingDesc =>
+      'Notifications not arriving? Android may be stopping the app in the background. In the app\'s system settings, allow background data and set battery use to unrestricted.';
+
+  @override
+  String get appSettingsPageOpenSystemSettingsButton => 'OPEN SYSTEM SETTINGS';
+
+  @override
   String get appSettingsPageSessionTitle => 'Session';
 
   @override
@@ -10514,6 +10698,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactsViewSearchHint => 'Search name, address, or inbox';
 
   @override
+  String get contactsViewFilterStarred =>
+      'Starred';
+
+  @override
+  String get contactsViewStar =>
+      'Star';
+
+  @override
+  String get contactsViewUnstar =>
+      'Remove star';
+
+  @override
+  String get contactsViewNoStarred =>
+      'No starred contacts yet. Turn off Starred to see everyone.';
+
+  @override
+  String get notificationsScreenStarredNote =>
+      'Only starred contacts raise chain notifications.';
+
+  @override
+  String get browserEditProfile =>
+      'Edit profile';
+
+  @override
+  String get browserStopEditing =>
+      'Stop editing';
+
+  @override
+  String get browserStarTooltip =>
+      'Star: get chain notifications about this contact';
+
+  @override
   String get contactsViewFilterPersonal => 'Personal';
 
   @override
@@ -10654,6 +10870,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get messagesViewNoKeysSubtitleAfter => ' button in the keychain.';
+
+  @override
+  String get chatNoKeyTitle => 'Load a key into XMTP to start messaging';
 
   @override
   String get manageChannelPageManageLabel => 'manage';
@@ -12600,6 +12819,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelHeaderHostedBy => 'hosted by';
 
   @override
+  String get channelHostedByCopy => 'a copy';
+
+  @override
+  String get channelHostNoSigTitle => 'NO OWNER SIGNATURE';
+
+  @override
+  String get channelHostNoSigExplain =>
+      'There is no owner\'s signature to check, so we cannot confirm who hosts this feed.';
+
+  @override
+  String get channelHostBadSigTitle => 'BAD OWNER SIGNATURE';
+
+  @override
+  String get channelHostBadSigExplain =>
+      'A signature is given for the owner, and it is bad. We cannot confirm the claimed owner ever agreed to host this feed.';
+
+  @override
+  String get signedCopyTitle => 'SIGNED COPY';
+
+  @override
+  String get signedCopyPostExplain =>
+      'A signed copy of the original post. Every field and signature is correct; it is being read here from another address than the one the author signed.';
+
+  @override
+  String get signedCopyChannelExplain =>
+      'The owner signed this channel at another address. This is a signed copy of it.';
+
+  @override
   String channelHeaderVerifiedReadersWord(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12998,6 +13245,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chsPostApprovedSub => 'A list just for posting.';
+
+  @override
+  String get chsSubLayout => 'How it looks';
+
+  @override
+  String get chsLayoutFeed => 'Feed';
+
+  @override
+  String get chsLayoutFeedSub => 'Newest first, no votes.';
+
+  @override
+  String get chsLayoutForum => 'Forum';
+
+  @override
+  String get chsLayoutForumSub => 'Votes, and sorting by New, Top, Hot.';
 
   @override
   String get chsPostFilterGrp =>
@@ -13417,6 +13679,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Cards start running instead of waiting for a tap. Uses more memory.';
 
   @override
+  String get desktopSettingsAppearanceTitle => 'Appearance';
+
+  @override
   String get desktopLogOut => 'LOG OUT';
 
   @override
@@ -13596,6 +13861,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopBubbleColorSection => 'BUBBLE COLOR';
+
+  @override
+  String get desktopBubbleColorIdentityNote =>
+      '\"Identity\" uses each account\'s Color record, the same color as its domain address bar. Set yours in the Account app, or override it here.';
 
   @override
   String get desktopAutoLabel => 'Auto';
@@ -15189,6 +15458,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get matureGateBack => 'Go back';
 
   @override
+  String get matureGateIosBody =>
+      'This profile contains mature content, which isn\'t available on iPhone yet.';
+
+  @override
   String get accountTagsSection => 'Account tags';
 
   @override
@@ -15254,11 +15527,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postSigExplainUnsigned =>
-      'Not signed. The author chose not to sign, so only the server vouches for who wrote it and what it said.';
+      'Not signed. There is no signature to check, so we cannot confirm who wrote this.';
 
   @override
   String get postSigExplainBad =>
-      'Bad signature. The signature does not match the content or the signer. The post may have been altered after signing.';
+      'Bad signature. A signature is given, and it does not match this post.';
 
   @override
   String get postSigExplainUnchecked =>

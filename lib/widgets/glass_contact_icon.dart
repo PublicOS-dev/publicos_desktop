@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:publicos_core/publicos_core.dart';
 
 import '../data/nft_avatar_prefs.dart';
+import '../router_helpers.dart';
 import '../theme/glass_tokens.dart';
 import 'nft_avatar_fx.dart';
 import 'nft_image.dart';
@@ -43,11 +44,57 @@ class GlassContactIcon extends StatefulWidget {
     return null;
   }
 
+  /// The one "open this account" tap: the contact's profile (its address, or
+  /// its inbox when it has no chain account), else the raw [address]. Null when
+  /// there is no account to open (a group-chat stub, an `address` that is
+  /// really an inbox id). Behind [opensProfile] and [ContactProfileTap].
+  static VoidCallback? profileTap(
+    BuildContext context, {
+    Contact? contact,
+    String? address,
+  }) {
+    const zero = '0x0000000000000000000000000000000000000000';
+    // Desktop has no route stack: the profile opens in the shell's pane, so a
+    // sheet or dialog this sits in has to be closed first or it stays on top.
+    void closeOverlays() => Navigator.of(context, rootNavigator: true)
+        .popUntil((r) => r.isFirst);
+    if (contact != null) {
+      final a = contact.publicosAddress?.eip55With0x;
+      final hasAccount = a != null && a != zero;
+      final hasInbox = contact.registeredInboxIDs?.isNotEmpty ?? false;
+      if (hasAccount || hasInbox) {
+        return () {
+          closeOverlays();
+          AppNav.toContact(context, contact);
+        };
+      }
+    }
+    if (address != null &&
+        address.length == 42 &&
+        address.startsWith('0x') &&
+        address != zero) {
+      return () {
+        closeOverlays();
+        AppNav.toProfile(context, address);
+      };
+    }
+    return null;
+  }
+
   final Contact? contact;
   final String? address;
   final double size;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// The icon itself opens this account's profile on tap: the contact's
+  /// address (or its inbox when it has no chain account), else the raw
+  /// [address]. One code path for every "who is this" avatar, so a row cannot
+  /// forget it. Off by default because many rows give the tap another meaning
+  /// (a picker selects, a conversation row opens the chat); an explicit
+  /// [onTap] always wins. With nothing to open, the icon takes no tap.
+  /// Client twin; the desktop delta is in `profileTap`.
+  final bool opensProfile;
 
   /// Optional Hero tag — wraps the icon in a [Hero] for cross-page transitions
   /// (e.g. the browser address-bar avatar → profile page). Pair with
@@ -75,6 +122,7 @@ class GlassContactIcon extends StatefulWidget {
     this.size = 64.0,
     this.onTap,
     this.onLongPress,
+    this.opensProfile = false,
     this.heroTag,
     this.borderColor,
     this.decodeSize,
@@ -356,10 +404,15 @@ class _GlassContactIconState extends State<GlassContactIcon>
       child: Stack(clipBehavior: Clip.none, children: children),
     );
 
-    final hasGesture = widget.onTap != null || widget.onLongPress != null;
+    final onTap = widget.onTap ??
+        (widget.opensProfile
+            ? GlassContactIcon.profileTap(context,
+                contact: widget.contact, address: widget.address)
+            : null);
+    final hasGesture = onTap != null || widget.onLongPress != null;
     final tappable = hasGesture
         ? GestureDetector(
-            onTap: widget.onTap,
+            onTap: onTap,
             onLongPress: widget.onLongPress,
             child: stack,
           )
@@ -370,6 +423,34 @@ class _GlassContactIconState extends State<GlassContactIcon>
         : tappable;
 
     return RepaintBoundary(child: result);
+  }
+}
+
+/// The name (or any text block) beside a [GlassContactIcon] that opens the
+/// profile: wrap it in this so avatar and name behave as one target. Same tap
+/// as [GlassContactIcon.opensProfile]; with no account to open it is inert.
+class ContactProfileTap extends StatelessWidget {
+  final Contact? contact;
+  final String? address;
+  final Widget child;
+
+  const ContactProfileTap({
+    super.key,
+    this.contact,
+    this.address,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final onTap =
+        GlassContactIcon.profileTap(context, contact: contact, address: address);
+    if (onTap == null) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: child,
+    );
   }
 }
 

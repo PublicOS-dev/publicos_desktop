@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:flutter/material.dart';
@@ -17,10 +18,20 @@ import 'utils/window_chrome.dart';
 import 'widgets/pixel_rain_loading_widget.dart';
 import 'widgets/wave_text.dart';
 import 'screens/select_account_screen.dart';
+import 'screens/app_lock_screen.dart';
 import 'screens/app_shell.dart';
+import 'utils/windows_credential_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The app PIN is kept in Windows Credential Manager, not in the app's own
+  // folder, where the secure-storage plugin would write it as a file
+  // (utils/windows_credential_store.dart).
+  if (Platform.isWindows) {
+    PublicOSAuth.pinStoreRead = WindowsCredentialStore.read;
+    PublicOSAuth.pinStoreWrite = WindowsCredentialStore.write;
+    PublicOSAuth.pinStoreDelete = WindowsCredentialStore.delete;
+  }
   // video_player has no Windows implementation; without this every
   // VideoPlayerController throws on initialize(). Must run before the first one
   // is built. See the zero_video_windows package.
@@ -108,7 +119,7 @@ class PublicOSDesktopApp extends StatelessWidget {
   }
 }
 
-enum _Phase { loading, initError, login, ready }
+enum _Phase { loading, lock, initError, login, ready }
 
 /// Boot gate. Runs the boot sequence (init Core → drafts → authenticate →
 /// auto-login restore), then lands on the glass screens: SelectAccountScreen,
@@ -123,6 +134,7 @@ class _InitGate extends StatefulWidget {
 class _InitGateState extends State<_InitGate> {
   _Phase _phase = _Phase.loading;
   String? _error;
+  AuthGate _lockGate = AuthGate.noLock;
 
   @override
   void initState() {
@@ -160,7 +172,21 @@ class _InitGateState extends State<_InitGate> {
 
     await PublicOSConversations.loadDrafts();
 
-    // Phase 2 — authenticate (no-op on platforms without device auth).
+    // Phase 2 — authenticate. A computer with Windows Hello is asked for it,
+    // as always. One without (or one that already has an app PIN) gets the
+    // app's own lock screen instead of the Retry loop it used to hit: that
+    // screen sets PublicOS.isAuthenticated and calls _init again.
+    if (!PublicOS.isAuthenticated && !PublicOS.debugNoAuthNeeded) {
+      final gate = await PublicOSAuth.authGate();
+      if (gate != AuthGate.deviceLock) {
+        if (!mounted) return;
+        setState(() {
+          _lockGate = gate;
+          _phase = _Phase.lock;
+        });
+        return;
+      }
+    }
     try {
       final authed =
           PublicOS.isAuthenticated || await PublicOSAuth.authenticate();
@@ -258,6 +284,8 @@ class _InitGateState extends State<_InitGate> {
             ),
           ),
         );
+      case _Phase.lock:
+        return AppLockScreen(gate: _lockGate, onDone: _init);
       case _Phase.initError:
         return Scaffold(
           backgroundColor: ShellTones.of(context).canvas,

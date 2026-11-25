@@ -1836,10 +1836,10 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
     final address = row.contact.publicosAddress?.eip55With0x ?? '';
     return Row(
       children: [
-        GlassContactIcon(contact: row.contact, address: address, size: 36),
+        GlassContactIcon(opensProfile: true, contact: row.contact, address: address, size: 36),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
+          child: ContactProfileTap(contact: row.contact, address: address, child: Text(
             row.contact.displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1849,7 +1849,7 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
-          ),
+          )),
         ),
         const SizedBox(width: 10),
         Text(
@@ -2392,10 +2392,10 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
       ),
       child: Row(
         children: [
-          GlassContactIcon(contact: contact, address: address, size: 40),
+          GlassContactIcon(opensProfile: true, contact: contact, address: address, size: 40),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
+            child: ContactProfileTap(contact: contact, address: address, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -2421,7 +2421,7 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
                   ),
                 ],
               ],
-            ),
+            )),
           ),
           GestureDetector(
             onTap: () => _removeRecoveryContact(contact.publicosAddress!),
@@ -3023,10 +3023,10 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
       ),
       child: Row(
         children: [
-          GlassContactIcon(contact: contact, address: address, size: 42),
+          GlassContactIcon(opensProfile: true, contact: contact, address: address, size: 42),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
+            child: ContactProfileTap(contact: contact, address: address, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -3052,7 +3052,7 @@ class _AccountCenterPageState extends State<AccountCenterPage> {
                   ),
                 ],
               ],
-            ),
+            )),
           ),
         ],
       ),

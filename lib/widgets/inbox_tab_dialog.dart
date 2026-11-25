@@ -72,6 +72,7 @@ Future<InboxTabResult?> showInboxTabDialog(
   String? currentLabel,
   String? initialLabel,
   bool offerDontAsk = false,
+  String? cancelLabel,
 }) {
   return showDialog<InboxTabResult>(
     context: context,
@@ -87,6 +88,7 @@ Future<InboxTabResult?> showInboxTabDialog(
       currentLabel: currentLabel,
       initialLabel: initialLabel,
       offerDontAsk: offerDontAsk,
+      cancelLabel: cancelLabel,
     ),
   );
 }
@@ -103,6 +105,10 @@ class _InboxTabDialog extends StatefulWidget {
   final String? initialLabel;
   final bool offerDontAsk;
 
+  /// The left button's text when it is not a plain cancel (the keychain
+  /// offer's "Keep private"). Null = Cancel.
+  final String? cancelLabel;
+
   const _InboxTabDialog({
     required this.account,
     required this.accountName,
@@ -114,6 +120,7 @@ class _InboxTabDialog extends StatefulWidget {
     this.currentLabel,
     this.initialLabel,
     this.offerDontAsk = false,
+    this.cancelLabel,
   });
 
   @override
@@ -409,7 +416,7 @@ class _InboxTabDialogState extends State<_InboxTabDialog> {
                                       saved: false, dontAskAgain: _dontAsk),
                                 ),
                         child: Text(
-                          l10n.actionCancel,
+                          widget.cancelLabel ?? l10n.actionCancel,
                           style: const TextStyle(
                             fontFamily: 'SpaceGrotesk',
                             fontWeight: FontWeight.w700,

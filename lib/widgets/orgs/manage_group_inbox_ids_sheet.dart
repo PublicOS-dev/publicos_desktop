@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:publicos_core/publicos_core.dart';
@@ -901,7 +902,7 @@ class _InboxIdRow extends StatelessWidget {
 /// "Registered to [icon] [name]": the owner as a mini avatar + display name,
 /// falling back to the short address. The l10n string is split at its
 /// placeholder so word order stays the translator's.
-class _RegisteredToLine extends StatelessWidget {
+class _RegisteredToLine extends StatefulWidget {
   final GlassTokens tokens;
   final String address;
   final Contact? contact;
@@ -913,7 +914,30 @@ class _RegisteredToLine extends StatelessWidget {
   });
 
   @override
+  State<_RegisteredToLine> createState() => _RegisteredToLineState();
+}
+
+class _RegisteredToLineState extends State<_RegisteredToLine> {
+  GlassTokens get tokens => widget.tokens;
+  String get address => widget.address;
+  Contact? get contact => widget.contact;
+
+  /// The name opens the same account as its mini-icon.
+  TapGestureRecognizer? _nameTap;
+
+  @override
+  void dispose() {
+    _nameTap?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _nameTap?.dispose();
+    _nameTap = null;
+    final open = GlassContactIcon.profileTap(context,
+        contact: contact, address: address);
+    if (open != null) _nameTap = TapGestureRecognizer()..onTap = open;
     const marker = '\u0000';
     final parts =
         context.l10n.manageGroupInboxIdsSheetRegisteredTo(marker).split(marker);
@@ -935,6 +959,7 @@ class _RegisteredToLine extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(right: 4),
               child: GlassContactIcon(
+                opensProfile: true,
                 contact: contact,
                 address: address,
                 size: 14,
@@ -944,6 +969,7 @@ class _RegisteredToLine extends StatelessWidget {
           TextSpan(
             text: name,
             style: style.copyWith(fontWeight: FontWeight.w700),
+            recognizer: _nameTap,
           ),
           if (parts.length > 1) TextSpan(text: parts.sublist(1).join()),
         ],

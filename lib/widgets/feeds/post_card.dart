@@ -26,6 +26,7 @@ import 'package:zero_mentions/zero_mentions.dart' show mentionToken;
 import 'package:publicos_desktop/widgets/shimmer_box.dart';
 import 'package:publicos_desktop/widgets/messages/reaction_details_sheet.dart';
 import 'package:publicos_desktop/widgets/transactions/send_sheet.dart';
+import 'package:publicos_desktop/widgets/transactions/quick_tip.dart';
 import 'package:publicos_desktop/widgets/phigital_loading_widget.dart';
 import 'package:publicos_desktop/widgets/pixel_rain_loading_widget.dart';
 import 'package:publicos_desktop/theme/theme_provider.dart';
@@ -117,6 +118,10 @@ class PostCard extends StatefulWidget {
   final double descriptionTextSize;
   final bool showCommentsIndicator;
   final bool interactive;
+
+  /// The screen's bar already shows the channel's title (an opened post):
+  /// the header lines do not repeat it as "in title".
+  final bool titleInBar;
   final VoidCallback? onPostDeleted;
   final VoidCallback? onPostUpdated;
   final void Function(String feedUrl)? onRemoveFeedFromList;
@@ -202,6 +207,7 @@ class PostCard extends StatefulWidget {
     this.descriptionTextSize = 14.0,
     this.showCommentsIndicator = true,
     this.interactive = true,
+    this.titleInBar = false,
     this.onPostDeleted,
     this.onPostUpdated,
     this.onRemoveFeedFromList,
@@ -1696,7 +1702,19 @@ class _PostCardState extends State<PostCard>
   /// row itself, so the row's centre alignment puts it on the name whatever
   /// the font metrics (a fixed offset from outside lands above the name).
   Widget _buildAuthorLine(Post post, GlassTokens tokens, {Widget? trailing}) {
-    final displayName = _displayedAuthorName(post);
+    final id = _identityOf(post);
+    // An outside article with no author: the feed's own title stands where
+    // the name goes (never a guessed name).
+    final displayName =
+        id.authorless ? (id.title ?? '—') : _displayedAuthorName(post);
+    // "in title" rides line 1 only when line 2 is taken by the found-at and
+    // the tab does not already name the feed (post_identity, 2026-11).
+    final inTitleOnLine1 = widget.showFeedContext &&
+        !widget.titleInBar &&
+        id.hasFoundAt &&
+        !id.tabNamesFeed &&
+        !id.authorless &&
+        id.title != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1723,17 +1741,37 @@ class _PostCardState extends State<PostCard>
                           // The name shimmers once in rainbow when the
                           // card's long-press finds a verified signature
                           // (the Easter egg).
-                          : SignedAuthorName(
-                              post: post,
-                              name: displayName,
-                              style: TextStyle(
-                                color: tokens.starkWhite,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
+                          // The name opens the author, like the avatar
+                          // with no profile to open
+                          // the tap falls through to the card.
+                          : GestureDetector(
+                              onTap: _authorProfileTap(),
+                              child: SignedAuthorName(
+                                post: post,
+                                name: displayName,
+                                style: TextStyle(
+                                  color: tokens.starkWhite,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                ),
                               ),
                             ),
                     ),
+                    if (id.authorless && id.outside) ...[
+                      const SizedBox(width: 4),
+                      _feedMark(tokens),
+                    ],
+                    if (inTitleOnLine1) ...[
+                      const SizedBox(width: 5),
+                      // Not flexible on purpose: when the line does not fit,
+                      // the author is the part that is cut, never "in title".
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                            maxWidth: MediaQuery.sizeOf(context).width * 0.42),
+                        child: _inTitle(id, tokens),
+                      ),
+                    ],
                     const SizedBox(width: 6),
                     Text('·', style: TextStyle(color: tokens.textDim)),
                     const SizedBox(width: 6),
@@ -1791,52 +1829,62 @@ class _PostCardState extends State<PostCard>
   /// the same `goToFeed` as the 3-dot menu's *Go to feed* — and is plain
   /// text wherever that item would be hidden.
   Widget _buildFeedContextSubtitle(Post post, GlassTokens tokens) {
-    final feedName = post.feedTitle?.trim();
-    final hasFeedName = feedName != null && feedName.isNotEmpty;
+    final id = _identityOf(post);
     final foundAt = _foundAtContact;
-    if (!hasFeedName && foundAt == null) {
-      return PostServerMark(post: post);
+    // No found-at: "in title" takes this line. An article with no author
+    // already carries the feed's title on line 1, so it gets no line 2.
+    if (!id.hasFoundAt) {
+      if (id.title == null || id.authorless || widget.titleInBar) {
+        return PostServerMark(post: post);
+      }
     }
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // "on account/feed" (a trial).
-        Text('${context.l10n.postCardFeedContextOn} ',
-            style: TextStyle(color: tokens.textDim, fontSize: 11)),
-        if (foundAt != null) ...[
-          GlassContactIcon(contact: foundAt, size: 14),
-          const SizedBox(width: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
-            child: Text(
-              foundAt.displayName ?? '—',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tokens.starkWhite.withValues(alpha: 0.85),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          if (hasFeedName)
-            Text('/', style: TextStyle(color: tokens.textDim, fontSize: 11)),
-        ],
-        if (hasFeedName)
-          Flexible(
-            child: Text(
-              feedName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tokens.textDim,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-      ],
+    final dim = TextStyle(color: tokens.textDim, fontSize: 11);
+    final strong = TextStyle(
+      color: tokens.starkWhite.withValues(alpha: 0.85),
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
     );
+    final row = !id.hasFoundAt
+        ? _inTitle(id, tokens)
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${context.l10n.postCardFeedContextOn} ', style: dim),
+              // The cleanest card: the profile it was found on is the author,
+              // so only the tab is named.
+              if (!id.foundOnAuthor) ...[
+                if (foundAt != null) ...[
+                  GlassContactIcon(contact: foundAt, size: 14),
+                  const SizedBox(width: 4),
+                ],
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    foundAt?.displayName ??
+                        _shortAddr(post.feedFoundAtAccountAddress ?? ''),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: strong,
+                  ),
+                ),
+                Text(' / ', style: dim),
+              ],
+              Flexible(
+                child: Text(
+                  id.tabLabel ?? id.title ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: id.foundOnAuthor
+                      ? strong
+                      : dim.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (id.outside && id.tabNamesFeed) ...[
+                const SizedBox(width: 4),
+                _feedMark(tokens),
+              ],
+            ],
+          );
     final canTap = widget.showGoToFeed && canGoToFeed(post);
     return Padding(
       padding: const EdgeInsets.only(top: 3),
@@ -1872,6 +1920,89 @@ class _PostCardState extends State<PostCard>
           ),
         ),
       ),
+    );
+  }
+
+  /// "in <title>": the channel's or feed's own title, smaller and not bold,
+  /// with the small feed mark after it when the feed is not PublicOS.
+  Widget _inTitle(_PostIdentity id, GlassTokens tokens) {
+    final dim = TextStyle(color: tokens.textDim, fontSize: 11);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('${context.l10n.postCardFeedContextIn} ', style: dim),
+        Flexible(
+          child: Text(
+            id.title ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: tokens.starkWhite.withValues(alpha: 0.8),
+              fontSize: 11,
+            ),
+          ),
+        ),
+        if (id.outside) ...[
+          const SizedBox(width: 4),
+          _feedMark(tokens),
+        ],
+      ],
+    );
+  }
+
+  /// The small mark right of the title of a feed that is not PublicOS (RSS,
+  /// Atom, JSON Feed). It says what kind of source this is; it is not a
+  /// warning, so it is neutral, never amber.
+  Widget _feedMark(GlassTokens tokens) => Icon(Icons.rss_feed_rounded,
+      size: 11, color: tokens.textDim.withValues(alpha: 0.9));
+
+  /// What the card's two lines are built from (post_identity, 2026-11).
+  _PostIdentity _identityOf(Post post) {
+    final outside = postIsOutside(post);
+    final foundAtAddr = post.feedFoundAtAccountAddress;
+    final key = post.feedRecordKey;
+    // A found-at is real only with its tab key: the channel reads stamp the
+    // owner as a stand-in profile, and that is not where a post was found.
+    final hasFoundAt = foundAtAddr != null &&
+        foundAtAddr.isNotEmpty &&
+        key != null &&
+        key.isNotEmpty;
+    bool same(String? a, String? b) =>
+        a != null && b != null && a.toLowerCase() == b.toLowerCase();
+    String? tabLabel;
+    if (hasFoundAt) {
+      for (final r in _foundAtContact?.records ?? const <Record>[]) {
+        if (r.key == key) {
+          final n = r.metadata['name'];
+          if (n is String && n.trim().isNotEmpty) tabLabel = n.trim();
+          break;
+        }
+      }
+    }
+    var title = post.feedTitle?.trim();
+    if (title == null || title.isEmpty) {
+      final slug = post.channelSlug;
+      if (!outside && slug != null && slug.isNotEmpty) {
+        title = '#$slug';
+      } else {
+        final host = Uri.tryParse(post.feedUrl ?? post.url ?? '')?.host ?? '';
+        title = host.isEmpty ? null : host.replaceFirst('www.', '');
+      }
+    }
+    final author = post.postAuthorAddress;
+    final rawAuthor = post.authorName?.trim() ?? '';
+    return _PostIdentity(
+      outside: outside,
+      hasFoundAt: hasFoundAt,
+      title: title,
+      tabLabel: tabLabel,
+      // The tab has priority: found on the channel owner's own profile, the
+      // tab names the feed and the title is dropped.
+      tabNamesFeed:
+          hasFoundAt && !outside && same(foundAtAddr, post.channelOwnerAddress),
+      foundOnAuthor: hasFoundAt && !outside && same(foundAtAddr, author),
+      authorless:
+          outside && (author == null || author.isEmpty) && rawAuthor.isEmpty,
     );
   }
 
@@ -2729,10 +2860,12 @@ class _PostCardState extends State<PostCard>
           const SizedBox(width: 14),
         ],
         if (tipCandidates.isNotEmpty) ...[
-          _buildActionItem(
-            icon: Icons.volunteer_activism_rounded,
+          // Click: the tip sheet. Long press: quick tip, when on in reader
+          // settings.
+          TipActionButton(
+            candidates: tipCandidates,
             color: tokens.textDim,
-            onTap: () => showSendSheet(
+            onOpenSheet: (onTipSent) => showSendSheet(
               context: context,
               config: SendSheetConfig(
                 targetMode: SendTargetMode.pickFrom,
@@ -2740,6 +2873,8 @@ class _PostCardState extends State<PostCard>
                 title: context.l10n.tipSheetTitle,
                 confirmLabel: context.l10n.tipSheetSendTip,
                 confirmIcon: Icons.volunteer_activism_rounded,
+                isTip: true,
+                onTipSent: onTipSent,
               ),
             ),
           ),
@@ -3065,13 +3200,10 @@ class _PostCardState extends State<PostCard>
 
     final author = _authorContact;
     if (author != null) {
-      final hasPublicOSProfile = author.publicosAddress != null &&
-          author.publicosAddress!.eip55With0x !=
-              '0x0000000000000000000000000000000000000000';
       return GlassContactIcon(
         contact: author,
         size: _avatarSize,
-        onTap: hasPublicOSProfile ? () => _navigateToProfile(author) : null,
+        onTap: _authorProfileTap(),
       );
     }
 
@@ -3114,6 +3246,17 @@ class _PostCardState extends State<PostCard>
         size: 18,
       ),
     );
+  }
+
+  /// The one tap that opens the post's author, shared by the avatar and the
+  /// name. Null when the author has no PublicOS profile to open.
+  VoidCallback? _authorProfileTap() {
+    final author = _authorContact;
+    if (author == null) return null;
+    final hasPublicOSProfile = author.publicosAddress != null &&
+        author.publicosAddress!.eip55With0x !=
+            '0x0000000000000000000000000000000000000000';
+    return hasPublicOSProfile ? () => _navigateToProfile(author) : null;
   }
 
   /// Navigate to profile page for a PublicOS contact
@@ -3756,4 +3899,39 @@ class _PostCardState extends State<PostCard>
       }
     }
   }
+}
+
+/// What a post's header lines are built from.
+class _PostIdentity {
+  /// The post is not one of ours by its address: an article from an outside
+  /// feed. No owner, no signature to look for, no provider to check.
+  final bool outside;
+
+  /// The list follows this feed through a profile's tab (profile + tab key).
+  final bool hasFoundAt;
+
+  /// The channel's or feed's own title; the slug or the site's host at worst.
+  final String? title;
+
+  /// The label the found-at profile gave its tab, when the contact is loaded.
+  final String? tabLabel;
+
+  /// Found on the channel owner's own profile: the tab names the feed.
+  final bool tabNamesFeed;
+
+  /// Found on the author's own profile: line 2 is "on tab" alone.
+  final bool foundOnAuthor;
+
+  /// An outside article that names no author.
+  final bool authorless;
+
+  const _PostIdentity({
+    required this.outside,
+    required this.hasFoundAt,
+    required this.title,
+    required this.tabLabel,
+    required this.tabNamesFeed,
+    required this.foundOnAuthor,
+    required this.authorless,
+  });
 }

@@ -46,6 +46,8 @@ Future<void> seedDemoContactsIfNeeded({bool force = false}) async {
       if (myAddr != null && addr == myAddr) continue; // never seed self
       try {
         await PublicOSContacts.saveContact(contact);
+        // Onboarding contacts start starred.
+        await PublicOSContacts.setStarred(contact, true);
       } catch (_) {
         // Non-fatal — keep seeding the rest.
       }

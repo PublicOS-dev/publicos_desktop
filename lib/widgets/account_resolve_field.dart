@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:publicos_core/publicos_core.dart';
 
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
+import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 
 const _zeroAddress = '0x0000000000000000000000000000000000000000';
@@ -47,7 +50,10 @@ Future<String?> resolveAccountInput(String input) async {
 /// `0x` address. While typing it searches local contacts (name, publicos
 /// name, account / session addresses, inbox IDs) and shows the matches in a
 /// panel floating above the field; picking one fills the field with that
-/// contact's account address. A pasted address that belongs to a known
+/// contact's account address. A typed name is also asked to the chain
+/// (exact account name): the account that holds it is the first row, saved
+/// contact or not, and a saved contact with exactly that name comes before
+/// the ones that only contain it. A pasted address that belongs to a known
 /// contact shows the contact row as identity confirmation; an unknown
 /// address is simply left as typed (outsider signers).
 ///
@@ -82,12 +88,21 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
 
   List<Contact> _matches = const [];
 
+  // The chain half of the search (picker canon: styling guide, "On-chain
+  // identifier resolution in contact pickers").
+  String _query = '';
+  bool _isSearching = false;
+  Contact? _searchResult;
+  int _resolveGeneration = 0;
+  Timer? _debounce;
+
   /// Text last written by a panel selection — suppresses re-opening the
   /// panel for the exact value the user just picked.
   String? _committed;
 
   static const _maxMatches = 5;
   static const _panelMaxHeight = 220.0;
+  static const _chainDebounce = Duration(milliseconds: 350);
 
   @override
   void initState() {
@@ -99,6 +114,8 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
   @override
   void dispose() {
     widget.controller.removeListener(_recompute);
+    _debounce?.cancel();
+    _resolveGeneration++;
     _removeOverlay();
     _focus.dispose();
     super.dispose();
@@ -124,8 +141,10 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
 
   void _recompute() {
     if (!mounted) return;
-    final q = widget.controller.text.trim().toLowerCase();
+    final raw = widget.controller.text.trim();
+    final q = raw.toLowerCase();
     if (!_focus.hasFocus || q.isEmpty || q == _committed?.toLowerCase()) {
+      _clearChainSearch();
       _setMatches(const []);
       return;
     }
@@ -133,6 +152,22 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
       _ensureContacts();
       return;
     }
+
+    // New text: forget the last chain answer and ask again. An address is
+    // not a name, so it stays a local match only.
+    if (q != _query) {
+      _clearChainSearch();
+      _query = q;
+      if (!q.startsWith('0x')) {
+        _isSearching = true;
+        final gen = _resolveGeneration;
+        _debounce = Timer(_chainDebounce, () => _resolveOnChain(raw, gen));
+      }
+    }
+
+    bool exact(Contact c) =>
+        c.displayName.toLowerCase() == q ||
+        c.publicosDisplayName?.toLowerCase() == q;
 
     // Same identifier surface as the contacts view search.
     final hits = _all.where((c) {
@@ -151,15 +186,65 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
               ?.any((cl) => cl.address.eip55With0x.toLowerCase().contains(q)) ??
           false;
     }).toList()
-      ..sort((a, b) =>
-          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+      ..sort((a, b) {
+        // The exact name first: with a cap of five and a short query (a
+        // 1-letter name), an alphabetical list would push it out of sight.
+        final ea = exact(a), eb = exact(b);
+        if (ea != eb) return ea ? -1 : 1;
+        return a.displayName
+            .toLowerCase()
+            .compareTo(b.displayName.toLowerCase());
+      });
+
+    // The account the chain says holds this name is the first row.
+    final found = _searchResult;
+    final foundAddr = found?.publicosAddress?.eip55With0x.toLowerCase();
+    if (found != null && foundAddr != null) {
+      hits.removeWhere(
+          (c) => c.publicosAddress?.eip55With0x.toLowerCase() == foundAddr);
+      hits.insert(0, found);
+    }
 
     _setMatches(hits.take(_maxMatches).toList());
   }
 
+  void _clearChainSearch() {
+    _debounce?.cancel();
+    _debounce = null;
+    _resolveGeneration++;
+    _query = '';
+    _isSearching = false;
+    _searchResult = null;
+  }
+
+  Future<void> _resolveOnChain(String name, int gen) async {
+    Contact? hit;
+    try {
+      final addr =
+          await PublicOSContacts.getPublicosAddressByPublicosDisplayName(name);
+      if (addr != null) {
+        final lower = addr.eip55With0x.toLowerCase();
+        for (final c in _all) {
+          if (c.publicosAddress?.eip55With0x.toLowerCase() == lower) {
+            hit = c;
+            break;
+          }
+        }
+        // Not a saved contact: read it for the row (shown, not saved).
+        hit ??= await PublicOSContacts.fetchContact(addr);
+      }
+    } catch (_) {
+      // No row from the chain; the add button still resolves the name.
+    }
+    if (!mounted || gen != _resolveGeneration) return;
+    _isSearching = false;
+    _searchResult = hit;
+    _recompute();
+  }
+
   void _setMatches(List<Contact> matches) {
     _matches = matches;
-    if (matches.isEmpty) {
+    if (matches.isEmpty && !_isSearching) {
       _removeOverlay();
     } else if (_overlay == null) {
       _insertOverlay();
@@ -224,16 +309,30 @@ class _AccountResolveFieldState extends State<AccountResolveField> {
                 child: ListView.separated(
                   shrinkWrap: true,
                   padding: EdgeInsets.zero,
-                  itemCount: _matches.length,
+                  itemCount: _matches.length + (_isSearching ? 1 : 0),
                   separatorBuilder: (_, __) => Divider(
                     height: 0.5,
                     thickness: 0.5,
                     color: tokens.borderSubtle,
                   ),
-                  itemBuilder: (_, i) => _MatchRow(
-                    contact: _matches[i],
-                    onTap: () => _select(_matches[i]),
-                  ),
+                  itemBuilder: (_, i) {
+                    // While the chain is asked, the first row says so.
+                    if (_isSearching && i == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        child: Text(
+                          context.l10n.accountCenterSearchingOnChain,
+                          style: TextStyle(
+                            color: tokens.textDim,
+                            fontSize: 13,
+                          ),
+                        ),
+                      );
+                    }
+                    final c = _matches[_isSearching ? i - 1 : i];
+                    return _MatchRow(contact: c, onTap: () => _select(c));
+                  },
                 ),
               ),
             ),

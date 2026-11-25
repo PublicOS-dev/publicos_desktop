@@ -479,12 +479,12 @@ class _CommentCardState extends State<CommentCard> {
 
   /// The post author's reaction badge: the server's word, except when the
   /// reader IS the post's author, whose own reactions show at once (their
-  /// first emoji), optimistic like the button.
+  /// first emoji), optimistic like the button. The author is the signed
+  /// post's author only: no channel-owner fallback, the badge is the
+  /// author's and no one else's.
   CommentAuthorReaction? get _authorReaction {
     final me = widget.myAddress?.toLowerCase();
-    final author = (widget.post.authorAddress ??
-            widget.post.channelOwnerAddress)
-        ?.toLowerCase();
+    final author = widget.post.postAuthorAddress?.toLowerCase();
     if (me != null && author != null && me == author) {
       final mine = _myEmojis();
       return mine.isEmpty
@@ -663,6 +663,7 @@ class _CommentCardState extends State<CommentCard> {
                     )
                   else
                     GlassContactIcon(
+                      opensProfile: true,
                       address: comment.accountAddress,
                       size: _avatarSize,
                     ),
@@ -787,7 +788,7 @@ class _CommentCardState extends State<CommentCard> {
             child: Row(
               children: [
                 Flexible(
-                  child: Text(
+                  child: ContactProfileTap(address: comment.accountAddress, child: Text(
                     comment.isDeleted
                         ? context.l10n.commentCardDeleted
                         : displayName,
@@ -802,7 +803,7 @@ class _CommentCardState extends State<CommentCard> {
                       fontStyle: comment.isDeleted ? FontStyle.italic : null,
                       height: 1.2,
                     ),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 6),
                 Text('·',

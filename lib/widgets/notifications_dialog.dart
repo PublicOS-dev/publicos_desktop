@@ -21,16 +21,18 @@ import 'package:publicos_desktop/theme/glass_tokens.dart';
 ///      natural height reaches the cap.
 /// Take away (2) and the dialog is always full height; take away (3) and a
 /// long list overflows instead of scrolling.
-Future<void> showNotificationsDialog(BuildContext context) {
+Future<void> showNotificationsDialog(BuildContext context,
+    {VoidCallback? onMarkedRead}) {
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black54,
-    builder: (_) => const _NotificationsDialog(),
+    builder: (_) => _NotificationsDialog(onMarkedRead: onMarkedRead),
   );
 }
 
 class _NotificationsDialog extends StatelessWidget {
-  const _NotificationsDialog();
+  final VoidCallback? onMarkedRead;
+  const _NotificationsDialog({this.onMarkedRead});
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +62,7 @@ class _NotificationsDialog extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: const NotificationsScreen(asDialogBody: true),
+          child: NotificationsScreen(asDialogBody: true, onMarkedRead: onMarkedRead),
         ),
       ),
     );

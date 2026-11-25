@@ -95,6 +95,7 @@ class _AddCustomFeedSheetState extends State<_AddCustomFeedSheet> {
         setState(() {
           _phase = _Phase.error;
           _error = l10n.addCustomFeedSheetNoPostsError;
+          _validatedUrl = url; // still addable, see the catch below
         });
         return;
       }
@@ -105,9 +106,14 @@ class _AddCustomFeedSheetState extends State<_AddCustomFeedSheet> {
       });
     } catch (e) {
       if (!mounted) return;
+      // The check never blocks the add: a wrong address only adds a feed
+      // with no posts. A private channel the reader may
+      // read, or a feed that is down right now, fails here and still works
+      // later. The reason stays on screen above the Add button.
       setState(() {
         _phase = _Phase.error;
         _error = _readableError(l10n, e);
+        _validatedUrl = url;
       });
     }
   }
@@ -132,13 +138,17 @@ class _AddCustomFeedSheetState extends State<_AddCustomFeedSheet> {
   Future<void> _add() async {
     final url = _validatedUrl;
     final feed = _feed;
-    if (url == null || feed == null) return;
+    if (url == null) return;
     final l10n = context.l10n;
     setState(() => _phase = _Phase.adding);
 
-    final title = feed.title.trim().isNotEmpty ? feed.title.trim() : null;
-    final description =
-        feed.description.trim().isNotEmpty ? feed.description.trim() : null;
+    // No preview (the check failed): add the bare URL, no title.
+    final title = feed != null && feed.title.trim().isNotEmpty
+        ? feed.title.trim()
+        : null;
+    final description = feed != null && feed.description.trim().isNotEmpty
+        ? feed.description.trim()
+        : null;
 
     bool ok;
     if (widget.listId != null) {
@@ -201,12 +211,21 @@ class _AddCustomFeedSheetState extends State<_AddCustomFeedSheet> {
                     _urlField(tokens),
                     const SizedBox(height: 12),
                     _checkButton(tokens),
-                    if (_phase == _Phase.error && _error != null) ...[
+                    // An unchecked add keeps the reason and its button
+                    // on screen while it saves (there is no preview).
+                    if ((_phase == _Phase.error ||
+                            (_phase == _Phase.adding && _feed == null)) &&
+                        _error != null) ...[
                       const SizedBox(height: 14),
                       _errorBox(tokens),
+                      if (_validatedUrl != null) ...[
+                        const SizedBox(height: 14),
+                        _addButton(tokens, isList),
+                      ],
                     ],
-                    if (_phase == _Phase.valid ||
-                        _phase == _Phase.adding) ...[
+                    if (_feed != null &&
+                        (_phase == _Phase.valid ||
+                            _phase == _Phase.adding)) ...[
                       const SizedBox(height: 16),
                       _preview(tokens),
                       const SizedBox(height: 16),

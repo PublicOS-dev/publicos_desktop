@@ -63,6 +63,23 @@ class PublicOSWebView extends StatefulWidget {
   /// is deferred). When null, signing falls back to the web-selected/session key.
   final EthPrivateKey? overrideSigningKey;
 
+  /// True when [overrideAccountAddress] is a wallet this device holds NO key
+  /// for (a linked address the user only watches). The page may be shown the
+  /// address; a signature request is refused, and [onNoSigningKey] says so.
+  /// Its approval is kept for this view only, never stored (see the bridge's
+  /// `PinnedGrantStore`).
+  final bool overrideWatchOnly;
+
+  /// A counter the host bumps to open THIS page's key permissions through its
+  /// own gate (the Manage view's key chip). In a pinned view that is the one
+  /// pinned key: approve it for the site, or take the approval back.
+  final int permissionsRevision;
+
+  /// The page asked a granted address to sign and no key is held for it (a
+  /// watched wallet). The host shows the notice where the user can see it;
+  /// with no host callback a snackbar is used.
+  final VoidCallback? onNoSigningKey;
+
   /// Fired whenever this page's CONNECTION state changes — `true` on a fresh
   /// grant (connect sheet) or a returning-granted load, `false` on an ungranted
   /// load or a web-key switch to a key this origin lacks. It is a connect
@@ -171,6 +188,9 @@ class PublicOSWebView extends StatefulWidget {
     this.onCanGoBackChanged,
     this.overrideAccountAddress,
     this.overrideSigningKey,
+    this.overrideWatchOnly = false,
+    this.permissionsRevision = 0,
+    this.onNoSigningKey,
     this.onConnectionChanged,
     this.onActiveAccountChanged,
     this.onChainRegistryCreated,
@@ -265,6 +285,31 @@ class _PublicOSWebViewState extends State<PublicOSWebView> {
 
   String get _chainId => _chains.currentChainId;
 
+  /// A granted address was asked to sign and this device holds no key for it.
+  void _noSigningKey() {
+    if (!mounted) return;
+    final tell = widget.onNoSigningKey;
+    if (tell != null) {
+      tell();
+      return;
+    }
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(context.l10n.walletWatchOnlyCantSign)),
+    );
+  }
+
+  /// Open this page's key permissions through its own gate, so every write
+  /// goes through the same store the page reads ([permissionsRevision]).
+  Future<void> _openPermissions() async {
+    final gate = _gate;
+    if (gate == null) return;
+    try {
+      await gate.requestPermissions(_currentOrigin);
+    } catch (_) {
+      // Dismissed, or the page has no origin yet. Nothing changed.
+    }
+  }
+
   /// Reads `widget.` through closures on every call, NOT captured once.
   ///
   /// The wallet manager builds this webview BEFORE its managed key has
@@ -357,7 +402,15 @@ class _PublicOSWebViewState extends State<PublicOSWebView> {
 
     final gate = ConnectGate(
       wallet: wallet,
-      grants: const CoreGrantStore(),
+      // The grant table as THIS view may see it. Pinned (the Manage view):
+      // only the pinned key's own approval, and the site's stored active key
+      // is never read or written, so the regular browser's choices for the
+      // same site are untouched. Not pinned: the table as it is.
+      grants: PinnedGrantStore(
+        const CoreGrantStore(),
+        pinOf: () => widget.overrideAccountAddress,
+        watchOnlyOf: () => widget.overrideWatchOnly,
+      ),
       consent: SheetWeb3Consent(
         contextOf: () => mounted ? context : null,
         chainIdOf: () => _chainId,
@@ -385,6 +438,7 @@ class _PublicOSWebViewState extends State<PublicOSWebView> {
       rpc: HttpWeb3Rpc(_chains, log: _log),
       transactions: ChainTransactionExecutor(_chains, log: _log),
       currentOrigin: () => _currentOrigin,
+      onNoSigningKey: (_) => _noSigningKey(),
       scope: widget.scope,
       log: _log,
     );
@@ -489,6 +543,9 @@ class _PublicOSWebViewState extends State<PublicOSWebView> {
     if (widget.grantsRevision != oldWidget.grantsRevision &&
         widget.initialUrl == oldWidget.initialUrl) {
       _gate?.refresh(_currentOrigin);
+    }
+    if (widget.permissionsRevision != oldWidget.permissionsRevision) {
+      _openPermissions();
     }
   }
 

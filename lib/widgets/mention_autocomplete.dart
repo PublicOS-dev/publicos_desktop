@@ -35,6 +35,7 @@ class MentionAutocomplete extends StatefulWidget {
 
 class _MentionAutocompleteState extends State<MentionAutocomplete> {
   List<Contact> _contacts = const [];
+  late final MentionChainLookup _chain = MentionChainLookup(_changed);
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
   void dispose() {
     widget.controller.removeListener(_changed);
     widget.focusNode.removeListener(_changed);
+    _chain.dispose();
     super.dispose();
   }
 
@@ -59,7 +61,10 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
 
   List<MentionCandidate> get _candidates {
     final t = widget.controller.trigger;
-    if (t == null) return const [];
+    if (t == null) {
+      _chain.resultFor(null);
+      return const [];
+    }
     final q = t.query.toLowerCase();
     final out = <MentionCandidate>[];
     for (final c in _contacts) {
@@ -69,9 +74,8 @@ class _MentionAutocompleteState extends State<MentionAutocomplete> {
         continue;
       }
       out.add(MentionCandidate(address: addr, display: c.displayName, contact: c));
-      if (out.length >= 8) break;
     }
-    return out;
+    return rankMentionCandidates(out, t.query, _chain.resultFor(t.query));
   }
 
   @override

@@ -26,11 +26,10 @@ class ChannelIcon extends StatelessWidget {
     final radius = size * 0.28;
     final glyphColor =
         selected ? tokens.connectedAccent : tokens.starkWhite;
-    // Forum glyph only when anyone can post (`postingPolicy == 'open'`).
-    // `approved` channels (allow-listed posters, e.g. newsletter) read like
-    // feeds, not forums.
+    // Forum glyph when the owner chose the forum layout (it used to follow
+    // "anyone can post"). Who may post no longer decides the look.
     final glyphIcon =
-        channel.isOpen ? Icons.forum_outlined : Icons.rss_feed_rounded;
+        channel.isForumLayout ? Icons.forum_outlined : Icons.rss_feed_rounded;
     final faviconUrl = _faviconUrlFor(channel.serverAddress);
     final iconUrl = channel.iconUrl;
     final hasIcon = iconUrl != null && iconUrl.isNotEmpty;

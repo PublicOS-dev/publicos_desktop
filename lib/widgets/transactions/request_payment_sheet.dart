@@ -231,6 +231,21 @@ class _RequestPaymentSheetState extends State<RequestPaymentSheet> {
         _payToAddress != null;
   }
 
+  /// The typed amount in the asset's smallest unit, with no rounding: digits
+  /// past [decimals] are dropped. null when the text is not plain digits with
+  /// at most one dot (the caller then scales the parsed number instead).
+  static BigInt? _toBaseUnits(String text, int decimals) {
+    final t = text.trim();
+    if (!RegExp(r'^\d*\.?\d*$').hasMatch(t) || !t.contains(RegExp(r'\d'))) {
+      return null;
+    }
+    final parts = t.split('.');
+    final whole = parts[0].isEmpty ? '0' : parts[0];
+    var frac = parts.length > 1 ? parts[1] : '';
+    if (frac.length > decimals) frac = frac.substring(0, decimals);
+    return BigInt.parse('$whole${frac.padRight(decimals, '0')}');
+  }
+
   Future<void> _submit() async {
     final asset = _asset;
     final payTo = _payToAddress;
@@ -238,8 +253,11 @@ class _RequestPaymentSheetState extends State<RequestPaymentSheet> {
     if (asset == null || payTo == null || amt == null || amt <= 0) return;
 
     setState(() => _sending = true);
-    // Same scaling the send path uses; fine for OX (18 decimals).
-    final amountWei = BigInt.from(amt * math.pow(10, asset.decimals));
+    // Exact, from the typed digits. Scaling through a double loses the amount:
+    // 1000000 * 1e18 is not a number a double can hold, and the request went out
+    // as 999999.999999999983 OX.
+    final amountWei = _toBaseUnits(_amountController.text, asset.decimals) ??
+        BigInt.from(amt * math.pow(10, asset.decimals));
     try {
       await widget.onRequest(payTo, amountWei, asset);
       if (mounted) Navigator.of(context).pop();

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:publicos_core/publicos_core.dart';
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
@@ -14,7 +15,7 @@ import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 /// `leave_request` (a member's self-removal request) is deliberately NOT
 /// surfaced — libxmtp's `PendingSelfRemoveWorker` auto-honors it into a
 /// `group_updated` removal within ~2s, and that removal is what we render here.
-class GroupEventLine extends StatelessWidget {
+class GroupEventLine extends StatefulWidget {
   /// The decoded `group_updated` payload (membership + metadata deltas).
   final GroupUpdated event;
 
@@ -34,7 +35,33 @@ class GroupEventLine extends StatelessWidget {
   });
 
   @override
+  State<GroupEventLine> createState() => _GroupEventLineState();
+}
+
+class _GroupEventLineState extends State<GroupEventLine> {
+  GroupUpdated get event => widget.event;
+  String get myInboxId => widget.myInboxId;
+  Contact? Function(String inboxId) get contactLookup => widget.contactLookup;
+
+  /// One per tappable name; rebuilt with the spans, disposed with the line.
+  final _nameTaps = <TapGestureRecognizer>[];
+
+  void _clearNameTaps() {
+    for (final r in _nameTaps) {
+      r.dispose();
+    }
+    _nameTaps.clear();
+  }
+
+  @override
+  void dispose() {
+    _clearNameTaps();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _clearNameTaps();
     final initiator = event.initiatedByInboxId;
     final rows = <Widget>[];
 
@@ -79,18 +106,26 @@ class GroupEventLine extends StatelessWidget {
   /// dropped when the contact isn't cached (name-only fallback).
   List<InlineSpan> _person(String inboxId) {
     final contact = inboxId.isNotEmpty ? contactLookup(inboxId) : null;
+    // The name opens the same account as its mini-icon; same text, same style.
+    final open = GlassContactIcon.profileTap(context, contact: contact);
+    TapGestureRecognizer? tap;
+    if (open != null) {
+      tap = TapGestureRecognizer()..onTap = open;
+      _nameTaps.add(tap);
+    }
     return [
       if (contact != null)
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
           child: Padding(
             padding: const EdgeInsets.only(right: 4),
-            child: GlassContactIcon(contact: contact, size: 16),
+            child: GlassContactIcon(opensProfile: true, contact: contact, size: 16),
           ),
         ),
       TextSpan(
         text: _name(inboxId),
         style: const TextStyle(fontWeight: FontWeight.w600),
+        recognizer: tap,
       ),
     ];
   }

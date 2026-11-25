@@ -275,6 +275,15 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
         ));
   }
 
+  void _setLayout(String layout) {
+    if (layout == _channel.effectiveLayout) return;
+    _apply(() => PublicOSChannels.updateChannel(
+          slug: _slug,
+          layout: layout,
+          serverAddress: _server,
+        ));
+  }
+
   void _setPostFilter(String tier) {
     if (tier == _channel.postingIdentity) return;
     _apply(() => PublicOSChannels.updateChannel(
@@ -914,12 +923,20 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
           ),
           _buildDrawer(
             n: 3,
+            title: l10n.chsSubLayout,
+            hint: _channel.isForumLayout
+                ? l10n.chsLayoutForum
+                : l10n.chsLayoutFeed,
+            panel: _buildLayoutPanel(tokens, l10n),
+          ),
+          _buildDrawer(
+            n: 4,
             title: l10n.chsDrawerTalk,
             hint: _hint3(l10n),
             panel: _buildTalkPanel(tokens, l10n),
           ),
           _buildDrawer(
-            n: 4,
+            n: 5,
             title: l10n.chsDrawerBlocked,
             hint: _bans.isEmpty
                 ? l10n.chsH4Nobody
@@ -927,13 +944,13 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
             panel: _buildBlockedPanel(tokens, l10n),
           ),
           _buildDrawer(
-            n: 5,
+            n: 6,
             title: l10n.chsDrawerVisibility,
             hint: _hint5(l10n),
             panel: _buildVisibilityPanel(tokens, l10n),
           ),
           _buildDrawer(
-            n: 6,
+            n: 7,
             title: l10n.chsDrawerMonetization,
             hint: _channel.isPaid ? l10n.chsH6Paid : l10n.chsH6Free,
             panel: _buildMonetizationPanel(tokens, l10n),
@@ -1493,7 +1510,31 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Drawer 3 — Who can comment and react
+  // Drawer 3 — How it looks: the owner's choice, its own drawer beside who
+  // can post, never derived from it.
+  // ---------------------------------------------------------------------------
+
+  List<Widget> _buildLayoutPanel(GlassTokens tokens, AppLocalizations l10n) {
+    return [
+      _OptionRow(
+        kind: _OptionKind.radio,
+        on: !_channel.isForumLayout,
+        label: l10n.chsLayoutFeed,
+        sub: l10n.chsLayoutFeedSub,
+        onTap: () => _setLayout(ChannelLayouts.feed),
+      ),
+      _OptionRow(
+        kind: _OptionKind.radio,
+        on: _channel.isForumLayout,
+        label: l10n.chsLayoutForum,
+        sub: l10n.chsLayoutForumSub,
+        onTap: () => _setLayout(ChannelLayouts.forum),
+      ),
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drawer 4 — Who can comment and react
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildTalkPanel(GlassTokens tokens, AppLocalizations l10n) {
@@ -1700,7 +1741,7 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Drawer 4 — Blocked
+  // Drawer 5 — Blocked
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildBlockedPanel(GlassTokens tokens, AppLocalizations l10n) {
@@ -1736,7 +1777,7 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Drawer 5 — Visibility
+  // Drawer 6 — Visibility
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildVisibilityPanel(GlassTokens tokens, AppLocalizations l10n) {
@@ -1761,7 +1802,7 @@ class _ChannelSettingsPageState extends State<ChannelSettingsPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // Drawer 6 — Monetization
+  // Drawer 7 — Monetization
   // ---------------------------------------------------------------------------
 
   List<Widget> _buildMonetizationPanel(
@@ -2533,7 +2574,7 @@ class _RequestTileState extends State<_RequestTile> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
+            child: ContactProfileTap(contact: _contact, address: address, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -2570,7 +2611,7 @@ class _RequestTileState extends State<_RequestTile> {
                     ),
                   ),
               ],
-            ),
+            )),
           ),
           const SizedBox(width: 8),
           if (widget.busy)

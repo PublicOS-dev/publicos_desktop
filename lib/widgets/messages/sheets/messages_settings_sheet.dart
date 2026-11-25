@@ -199,6 +199,16 @@ class _MessagesSettingsSheetState extends State<_MessagesSettingsSheet> {
               tokens: tokens,
               onTap: _copyEncryptionKey,
             ),
+            // The same pair, kept on the user's SSP for 24 hours: the other
+            // device finds it by itself when the key is set up there
+            // Twin of the client's row.
+            _ActionTile(
+              icon: Icons.cloud_upload_outlined,
+              label: context.l10n.messagesSettingsSheetSspBackupLabel,
+              subtitle: context.l10n.messagesSettingsSheetSspBackupSubtitle,
+              tokens: tokens,
+              onTap: _backupToSsp,
+            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -279,6 +289,71 @@ class _MessagesSettingsSheetState extends State<_MessagesSettingsSheet> {
           content: Text(localizedError(l10n, e,
               fallback: l10n.messagesSettingsSheetBackupFailed))));
     }
+  }
+
+  /// Back up the active key's chats to the user's SSP. Core does the work
+  /// (export, size and quota checks, wrap the database key, upload); this
+  /// only warns first and reports the outcome. Messaging closes for the copy
+  /// and reopens, as with the download above.
+  Future<void> _backupToSsp() async {
+    final l10n = context.l10n;
+    final messenger = ScaffoldMessenger.of(context);
+    final userAddress = PublicOS.myPublicosAddress;
+    final label = PublicOS.currentXmtpKeyLabel;
+    if (userAddress == null || label == null) {
+      messenger.showSnackBar(
+          SnackBar(content: Text(l10n.messagesSettingsSheetNoActiveKey)));
+      return;
+    }
+
+    final proceed = await _showConfirm(
+      l10n.messagesSettingsSheetSspBackupLabel,
+      l10n.messagesSettingsSheetSspBackupWarning,
+    );
+    if (proceed != true || !mounted) return;
+
+    final navigator = Navigator.of(context);
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    final overlay = FullscreenOverlay.showBlocking(
+        context, l10n.messagesSettingsSheetSspBackupWorking);
+    String message;
+    try {
+      final tmpDir = await getTemporaryDirectory();
+      final backup = await PublicOSKeychain.backupChatsToSsp(
+          userAddress, label, tmpDir.path);
+      Log.i(_backupTag,
+          '[SSP] backup made id=${backup.id} size=${backup.fileSize} expires=${backup.expiresAt}');
+      // Success stays on the same dark screen: the working overlay is
+      // replaced by the result (what was backed up, until when) with a
+      // Continue button. No snack on this path.
+      await navigator.pushReplacement(PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (ctx, _, __) => FullscreenOverlay(
+          dismissible: false,
+          opacity: 0.7,
+          child: _SspBackupDone(backup: backup, label: label, locale: locale),
+        ),
+        transitionsBuilder: (ctx, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ));
+      return;
+    } on ChatBackupTooLargeException catch (e) {
+      Log.w(_backupTag, '[SSP] $e');
+      message = l10n.messagesSettingsSheetSspBackupTooLarge;
+    } on ChatBackupQuotaException catch (e) {
+      Log.w(_backupTag, '[SSP] $e');
+      message =
+          l10n.messagesSettingsSheetSspBackupNoSpace(e.needMb, e.freeMb);
+    } catch (e, st) {
+      Log.e(_backupTag, '[SSP] backup failed: $e\n$st');
+      message = localizedError(l10n, e,
+          fallback: l10n.messagesSettingsSheetBackupFailed);
+    }
+    overlay.dismiss();
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _copyEncryptionKey() async {
@@ -774,6 +849,95 @@ class _ActionTile extends StatelessWidget {
                 ),
               ),
               Icon(Icons.chevron_right_rounded, color: tokens.textDim),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What the user sees when "Backup to SSP" finished: that it was uploaded,
+/// which inbox and key it belongs to, its size and when the server deletes
+/// it. Sits on the same dark screen as the working overlay.
+class _SspBackupDone extends StatelessWidget {
+  final PediaFile backup;
+  final String label;
+  final String locale;
+  const _SspBackupDone(
+      {required this.backup, required this.label, required this.locale});
+
+  static String _short(String s) =>
+      s.length > 14 ? '${s.substring(0, 6)}...${s.substring(s.length - 4)}' : s;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final expires = DateTime.tryParse(backup.expiresAt)?.toLocal();
+    final mb = backup.fileSize / (1024 * 1024);
+    final facts = <(String, String)>[
+      (l10n.messagesSettingsSheetSspBackupFactInbox, _short(backup.inboxId)),
+      (
+        l10n.messagesSettingsSheetSspBackupFactKey,
+        '$label · ${_short(backup.keyAddress)}'
+      ),
+      (
+        l10n.messagesSettingsSheetSspBackupFactSize,
+        '${mb < 0.1 ? '0.1' : mb.toStringAsFixed(1)} MB'
+      ),
+      if (expires != null)
+        (
+          l10n.messagesSettingsSheetSspBackupFactDeleted,
+          DateFormat.MMMd(locale).add_Hm().format(expires)
+        ),
+    ];
+    const dim = TextStyle(color: Colors.white70, fontSize: 13, height: 1.4);
+    const strong = TextStyle(
+        color: Colors.white,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        height: 1.4);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_done_outlined,
+                  color: Colors.white, size: 36),
+              const SizedBox(height: 12),
+              Text(
+                l10n.messagesSettingsSheetSspBackupDoneTitle,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(l10n.messagesSettingsSheetSspBackupDone,
+                  textAlign: TextAlign.center, style: dim),
+              const SizedBox(height: 20),
+              for (final f in facts)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Text(f.$1, style: dim),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(f.$2,
+                            textAlign: TextAlign.right, style: strong),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.messagesSettingsSheetContinue),
+              ),
             ],
           ),
         ),

@@ -795,9 +795,9 @@ class _ExpandedFeedsState extends State<_ExpandedFeeds> {
               child: Row(
                   children: [
                     if (contact != null)
-                      GlassContactIcon(contact: contact, size: 32)
+                      GlassContactIcon(opensProfile: true, contact: contact, size: 32)
                     else if (addr != null && addr.isNotEmpty)
-                      GlassContactIcon(address: addr, size: 32)
+                      GlassContactIcon(opensProfile: true, address: addr, size: 32)
                     else
                       Container(
                         width: 32,
@@ -1314,7 +1314,7 @@ class _FollowedAccountRowState extends State<_FollowedAccountRow> {
         _channels = channels;
         _muted
           ..clear()
-          ..addAll(mutes[widget.account.accountAddress] ?? const {});
+          ..addAll(mutes[widget.account.accountAddress.toLowerCase()] ?? const {});
       });
     } catch (_) {
       if (mounted) setState(() => _channels = const []);
@@ -1379,31 +1379,54 @@ class _FollowedAccountRowState extends State<_FollowedAccountRow> {
           padding: EdgeInsets.fromLTRB(_BodyInset.of(context), 0, 16, 8),
           child: Row(
             children: [
-              _contact != null
-                  ? GlassContactIcon(contact: _contact!, size: 32)
-                  : GlassContactIcon(address: addr, size: 32),
-              const SizedBox(width: 10),
+              // The person (avatar + name) opens their profile; the trailing
+              // buttons keep their own taps. Desktop delta: the pane switch
+              // happens under this sheet, so the sheet closes first.
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: tokens.starkWhite,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                child: InkWell(
+                  onTap: () {
+                    final contact = _contact;
+                    Navigator.of(context, rootNavigator: true)
+                        .popUntil((r) => r.isFirst);
+                    if (contact != null) {
+                      AppNav.toContact(context, contact);
+                    } else {
+                      AppNav.toProfile(context, addr);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    children: [
+                      _contact != null
+                          ? GlassContactIcon(contact: _contact!, size: 32)
+                          : GlassContactIcon(address: addr, size: 32),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: tokens.starkWhite,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              subline,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: tokens.textDim, fontSize: 11),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      subline,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: tokens.textDim, fontSize: 11),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               IconButton(

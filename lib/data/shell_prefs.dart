@@ -12,10 +12,12 @@ class ShellPrefs {
   static const String _kStatusBarTop = 'status_bar_top';
   static const String _kAutoplayCards = 'autoplay_app_cards';
 
-  /// Status bar docked at the top edge instead of the bottom (default bottom).
+  /// Status bar docked at the top edge instead of the bottom. The default is
+  /// TOP for a new install; someone who already
+  /// picked a side keeps it.
   /// The shell root is `Column[Row[rail, panes], StatusBar]`, so this only
   /// reorders the Column's children — by design.
-  static final ValueNotifier<bool> statusBarTop = ValueNotifier<bool>(false);
+  static final ValueNotifier<bool> statusBarTop = ValueNotifier<bool>(true);
 
   /// Run every interactive app card as soon as a profile opens, instead of
   /// waiting for a tap.
@@ -28,7 +30,7 @@ class ShellPrefs {
 
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    statusBarTop.value = prefs.getBool(_kStatusBarTop) ?? false;
+    statusBarTop.value = prefs.getBool(_kStatusBarTop) ?? true;
     autoplayCards.value = prefs.getBool(_kAutoplayCards) ?? false;
   }
 

@@ -992,6 +992,26 @@ abstract class AppLocalizations {
   /// **'An unexpected error occurred during initialization. Please try again.'**
   String get bootErrUnexpected;
 
+  // The app lock (no Windows Hello, or an app PIN): screens/app_lock_screen.
+  String get lockNoLockTitle;
+  String get lockNoLockBody;
+  String get lockOpenSettings;
+  String get lockIHaveSetLock;
+  String get lockSetPinInstead;
+  String get lockSetPinTitle;
+  String get lockSetPinBody;
+  String get lockConfirmPinTitle;
+  String get lockPinMismatch;
+  String get lockEnterPinTitle;
+  String lockWrongPin(int count);
+  String get lockForgotPin;
+  String get lockLockedTitle;
+  String get lockLockedBody;
+  String get lockResetButton;
+  String get lockResetTitle;
+  String get lockResetBody;
+  String get lockResetConfirm;
+
   /// No description provided for @onbPublicosTitle.
   ///
   /// In en, this message translates to:
@@ -1577,8 +1597,20 @@ abstract class AppLocalizations {
   /// No description provided for @onbCoachGenerate.
   ///
   /// In en, this message translates to:
-  /// **'**Generate** a key. It is made on this device and stored nowhere else.'**
+  /// **'Your messages arrive in an **inbox** outside, and an inbox has its own lock. You can put up as many inboxes as you like. Let's cut the key for your first one.'**
   String get onbCoachGenerate;
+
+  /// No description provided for @onbCoachHouse.
+  ///
+  /// In en, this message translates to:
+  /// **'This is your **keychain**. Think of your account as your house. You already have the key to the front door: it's the one marked **SESSION**.'**
+  String get onbCoachHouse;
+
+  /// No description provided for @onbCoachContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap anywhere to continue'**
+  String get onbCoachContinue;
 
   /// No description provided for @onbCoachSim.
   ///
@@ -2432,6 +2464,12 @@ abstract class AppLocalizations {
   /// **'Key deleted. Messaging is off until you pick a key.'**
   String get keychainKeyDeletedUnloaded;
 
+  /// No description provided for @keychainKeyUnloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Key unloaded. Messaging is off until you load a key.'**
+  String get keychainKeyUnloaded;
+
   /// No description provided for @keychainAddressCopied.
   ///
   /// In en, this message translates to:
@@ -2573,8 +2611,14 @@ abstract class AppLocalizations {
   /// No description provided for @keychainOfferRegDontAsk.
   ///
   /// In en, this message translates to:
-  /// **'Don\'t ask again'**
+  /// **'Don\'t suggest again for any key'**
   String get keychainOfferRegDontAsk;
+
+  /// No description provided for @keychainOfferRegKeepPrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep private'**
+  String get keychainOfferRegKeepPrivate;
 
   /// No description provided for @keychainOfferRegPublish.
   ///
@@ -3253,6 +3297,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Activity'**
   String get walletActivityTitle;
+
+  /// No description provided for @walletWatchOnlyCantSign.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch-only wallet: this device doesn\'t hold its key, so it can\'t sign.'**
+  String get walletWatchOnlyCantSign;
 
   /// No description provided for @walletActivityEmpty.
   ///
@@ -8793,6 +8843,48 @@ abstract class AppLocalizations {
   /// **'The reaction a double tap on a post adds. Tap to choose.'**
   String get feedsSettingsSheetDoubleTapHint;
 
+  /// No description provided for @feedsSettingsSheetGroupTips.
+  ///
+  /// In en, this message translates to:
+  /// **'Tips'**
+  String get feedsSettingsSheetGroupTips;
+
+  /// No description provided for @feedsSettingsSheetMyTipLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MY TIP'**
+  String get feedsSettingsSheetMyTipLabel;
+
+  /// No description provided for @feedsSettingsSheetMyTipHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preselected when you tip a post, and what a long press on the tip button sends.'**
+  String get feedsSettingsSheetMyTipHint;
+
+  /// No description provided for @feedsSettingsSheetQuickTipLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'LONG PRESS TO TIP'**
+  String get feedsSettingsSheetQuickTipLabel;
+
+  /// No description provided for @feedsSettingsSheetQuickTipOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On: hold the tip button to send your tip to the author from your main wallet. Tap again while the ring fills to cancel.'**
+  String get feedsSettingsSheetQuickTipOn;
+
+  /// No description provided for @feedsSettingsSheetQuickTipOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off: the tip button always opens the tip sheet.'**
+  String get feedsSettingsSheetQuickTipOff;
+
+  /// No description provided for @quickTipFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The tip didn\'t go through.'**
+  String get quickTipFailed;
+
   /// No description provided for @feedsSettingsSheetGroupSignature.
   ///
   /// In en, this message translates to:
@@ -9914,6 +10006,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'on'**
   String get postCardFeedContextOn;
+
+  /// No description provided for @postCardFeedContextIn.
+  ///
+  /// In en, this message translates to:
+  /// **'in'**
+  String get postCardFeedContextIn;
 
   /// No description provided for @feedReaderPageUpdated.
   ///
@@ -11258,6 +11356,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup failed.'**
   String get messagesSettingsSheetBackupFailed;
+
+  /// No description provided for @messagesSettingsSheetSspBackupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup to SSP'**
+  String get messagesSettingsSheetSspBackupLabel;
+
+  /// No description provided for @messagesSettingsSheetSspBackupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A copy on your server for 24 hours, to move your chats to another device'**
+  String get messagesSettingsSheetSspBackupSubtitle;
+
+  /// No description provided for @messagesSettingsSheetSspBackupWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This is a short-lived backup. It is held on your server for 24 hours and deleted after that. Messages after this moment are not part of it.\n\nIf you want a long-lived copy, download the database with the other option.'**
+  String get messagesSettingsSheetSspBackupWarning;
+
+  /// No description provided for @messagesSettingsSheetSspBackupWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up to your SSP…\n\nThis might take 1 to 2 minutes. Do not leave this screen.'**
+  String get messagesSettingsSheetSspBackupWorking;
+
+  /// No description provided for @messagesSettingsSheetSspBackupDoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup done'**
+  String get messagesSettingsSheetSspBackupDoneTitle;
+
+  /// No description provided for @messagesSettingsSheetSspBackupFactInbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Inbox'**
+  String get messagesSettingsSheetSspBackupFactInbox;
+
+  /// No description provided for @messagesSettingsSheetSspBackupFactKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Key'**
+  String get messagesSettingsSheetSspBackupFactKey;
+
+  /// No description provided for @messagesSettingsSheetSspBackupFactSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get messagesSettingsSheetSspBackupFactSize;
+
+  /// No description provided for @messagesSettingsSheetSspBackupFactDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted on'**
+  String get messagesSettingsSheetSspBackupFactDeleted;
+
+  /// No description provided for @messagesSettingsSheetSspBackupDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup made. Your server deletes it in 24 hours.'**
+  String get messagesSettingsSheetSspBackupDone;
+
+  /// No description provided for @messagesSettingsSheetSspBackupTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Your chat database is over 100 MB, too large for this backup. Download the database with the other option.'**
+  String get messagesSettingsSheetSspBackupTooLarge;
+
+  /// No description provided for @messagesSettingsSheetSspBackupNoSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough space on your server: the backup needs {need} MB and {free} MB are free.'**
+  String messagesSettingsSheetSspBackupNoSpace(int need, int free);
+
+  /// No description provided for @keychainSetupRestoreSsp.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore from your SSP'**
+  String get keychainSetupRestoreSsp;
+
+  /// No description provided for @keychainSetupRestoreSspDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server holds a backup of this key\'s chats, made {when}. Keeps your message history and does not use a device slot.'**
+  String keychainSetupRestoreSspDetail(String when);
+
+  /// No description provided for @keychainRestoreSspWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring your chats…\n\nDo not close the app.'**
+  String get keychainRestoreSspWorking;
+
+  /// No description provided for @keychainRestoreSspWrongKey.
+  ///
+  /// In en, this message translates to:
+  /// **'This key did not make that backup.'**
+  String get keychainRestoreSspWrongKey;
+
+  /// No description provided for @keychainDeleteChatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chats too?'**
+  String get keychainDeleteChatsTitle;
+
+  /// No description provided for @keychainDeleteChatsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Also delete the chats and XMTP data on this device for this key and inbox \"{inbox}\"?\n\nThe same key under another label will also lose them. Without a backup they cannot be brought back.'**
+  String keychainDeleteChatsBody(String inbox);
+
+  /// No description provided for @keychainDeleteChatsKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep chats'**
+  String get keychainDeleteChatsKeep;
+
+  /// No description provided for @keychainDeleteChatsDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chats'**
+  String get keychainDeleteChatsDelete;
 
   /// No description provided for @messagesSettingsSheetBackupFileTypeLabel.
   ///
@@ -15364,6 +15582,18 @@ abstract class AppLocalizations {
   /// **'Notifications for on-chain events'**
   String get appSettingsPageChainNotificationsSubtitle;
 
+  /// No description provided for @appSettingsPageNotifsNotArrivingDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications not arriving? Android may be stopping the app in the background. In the app\'s system settings, allow background data and set battery use to unrestricted.'**
+  String get appSettingsPageNotifsNotArrivingDesc;
+
+  /// No description provided for @appSettingsPageOpenSystemSettingsButton.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN SYSTEM SETTINGS'**
+  String get appSettingsPageOpenSystemSettingsButton;
+
   /// No description provided for @appSettingsPageSessionTitle.
   ///
   /// In en, this message translates to:
@@ -17884,6 +18114,54 @@ abstract class AppLocalizations {
   /// **'Search name, address, or inbox'**
   String get contactsViewSearchHint;
 
+  /// No description provided for @contactsViewFilterStarred.
+  ///
+  /// In en, this message translates to:
+  /// **'Starred'**
+  String get contactsViewFilterStarred;
+
+  /// No description provided for @contactsViewStar.
+  ///
+  /// In en, this message translates to:
+  /// **'Star'**
+  String get contactsViewStar;
+
+  /// No description provided for @contactsViewUnstar.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove star'**
+  String get contactsViewUnstar;
+
+  /// No description provided for @contactsViewNoStarred.
+  ///
+  /// In en, this message translates to:
+  /// **'No starred contacts yet. Turn off Starred to see everyone.'**
+  String get contactsViewNoStarred;
+
+  /// No description provided for @notificationsScreenStarredNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Only starred contacts raise chain notifications.'**
+  String get notificationsScreenStarredNote;
+
+  /// No description provided for @browserEditProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get browserEditProfile;
+
+  /// No description provided for @browserStopEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop editing'**
+  String get browserStopEditing;
+
+  /// No description provided for @browserStarTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Star: get chain notifications about this contact'**
+  String get browserStarTooltip;
+
   /// No description provided for @contactsViewFilterPersonal.
   ///
   /// In en, this message translates to:
@@ -18141,6 +18419,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **' button in the keychain.'**
   String get messagesViewNoKeysSubtitleAfter;
+
+  /// Chat tab with no XMTP inbox loaded: shown under a sim icon instead of the conversation and its input. Tapping opens the keychain.
+  ///
+  /// In en, this message translates to:
+  /// **'Load a key into XMTP to start messaging'**
+  String get chatNoKeyTitle;
 
   /// No description provided for @manageChannelPageManageLabel.
   ///
@@ -21379,6 +21663,54 @@ abstract class AppLocalizations {
   /// **'hosted by'**
   String get channelHeaderHostedBy;
 
+  /// No description provided for @channelHostedByCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'a copy'**
+  String get channelHostedByCopy;
+
+  /// No description provided for @channelHostNoSigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'NO OWNER SIGNATURE'**
+  String get channelHostNoSigTitle;
+
+  /// No description provided for @channelHostNoSigExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no owner\'s signature to check, so we cannot confirm who hosts this feed.'**
+  String get channelHostNoSigExplain;
+
+  /// No description provided for @channelHostBadSigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'BAD OWNER SIGNATURE'**
+  String get channelHostBadSigTitle;
+
+  /// No description provided for @channelHostBadSigExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'A signature is given for the owner, and it is bad. We cannot confirm the claimed owner ever agreed to host this feed.'**
+  String get channelHostBadSigExplain;
+
+  /// No description provided for @signedCopyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SIGNED COPY'**
+  String get signedCopyTitle;
+
+  /// No description provided for @signedCopyPostExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'A signed copy of the original post. Every field and signature is correct; it is being read here from another address than the one the author signed.'**
+  String get signedCopyPostExplain;
+
+  /// No description provided for @signedCopyChannelExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'The owner signed this channel at another address. This is a signed copy of it.'**
+  String get signedCopyChannelExplain;
+
   /// No description provided for @channelHeaderVerifiedReadersWord.
   ///
   /// In en, this message translates to:
@@ -22074,6 +22406,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'A list just for posting.'**
   String get chsPostApprovedSub;
+
+  /// No description provided for @chsSubLayout.
+  ///
+  /// In en, this message translates to:
+  /// **'How it looks'**
+  String get chsSubLayout;
+
+  /// No description provided for @chsLayoutFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Feed'**
+  String get chsLayoutFeed;
+
+  /// No description provided for @chsLayoutFeedSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Newest first, no votes.'**
+  String get chsLayoutFeedSub;
+
+  /// No description provided for @chsLayoutForum.
+  ///
+  /// In en, this message translates to:
+  /// **'Forum'**
+  String get chsLayoutForum;
+
+  /// No description provided for @chsLayoutForumSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Votes, and sorting by New, Top, Hot.'**
+  String get chsLayoutForumSub;
 
   /// No description provided for @chsPostFilterGrp.
   ///
@@ -22795,6 +23157,12 @@ abstract class AppLocalizations {
   /// **'Cards start running instead of waiting for a tap. Uses more memory.'**
   String get desktopAutoplayCardsSubtitle;
 
+  /// publicos_desktop Settings › Appearance section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get desktopSettingsAppearanceTitle;
+
   /// publicos_desktop Settings footer button.
   ///
   /// In en, this message translates to:
@@ -23100,6 +23468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'BUBBLE COLOR'**
   String get desktopBubbleColorSection;
+
+  /// publicos_desktop chat settings dialog: small note under the BUBBLE COLOR label explaining the Identity default chip.
+  ///
+  /// In en, this message translates to:
+  /// **'\"Identity\" uses each account\'s Color record, the same color as its domain address bar. Set yours in the Account app, or override it here.'**
+  String get desktopBubbleColorIdentityNote;
 
   /// publicos_desktop chat appearance: default text color option.
   ///
@@ -25813,6 +26187,12 @@ abstract class AppLocalizations {
   /// **'Go back'**
   String get matureGateBack;
 
+  /// iOS only: shown instead of the 18+ question when opening a mature profile; the profile cannot be opened on iOS for now.
+  ///
+  /// In en, this message translates to:
+  /// **'This profile contains mature content, which isn\'t available on iPhone yet.'**
+  String get matureGateIosBody;
+
   /// No description provided for @accountTagsSection.
   ///
   /// In en, this message translates to:
@@ -25936,13 +26316,13 @@ abstract class AppLocalizations {
   /// No description provided for @postSigExplainUnsigned.
   ///
   /// In en, this message translates to:
-  /// **'Not signed. The author chose not to sign, so only the server vouches for who wrote it and what it said.'**
+  /// **'Not signed. There is no signature to check, so we cannot confirm who wrote this.'**
   String get postSigExplainUnsigned;
 
   /// No description provided for @postSigExplainBad.
   ///
   /// In en, this message translates to:
-  /// **'Bad signature. The signature does not match the content or the signer. The post may have been altered after signing.'**
+  /// **'Bad signature. A signature is given, and it does not match this post.'**
   String get postSigExplainBad;
 
   /// No description provided for @postSigExplainUnchecked.

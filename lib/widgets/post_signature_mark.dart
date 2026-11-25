@@ -38,6 +38,7 @@ class PostSignatureMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (postIsOutside(post)) return child;
     final serverUrl = postServerUrlOf(post);
     final known = PublicOSSsp.sspRegistrationIfKnown(serverUrl);
     if (known != null) return _withServer(context, known);
@@ -102,6 +103,11 @@ class PostSignatureMark extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           child,
+          // A signed copy: everything checks, read in a channel not its own.
+          if (state == PostSignatureState.checked && postIsReadElsewhere(post)) ...[
+            const SizedBox(width: 5),
+            const SignedCopyBadge(),
+          ],
           if (markColor != null) ...[
             const SizedBox(width: 5),
             Semantics(
@@ -270,6 +276,16 @@ Future<void> showPostSignatureDialog(
 /// `scheme://host[:port]`.
 String postServerUrlOf(Post post) => post.feedUrl ?? post.url ?? '';
 
+/// An article from an outside feed (RSS, Atom, JSON Feed): neither its own
+/// address nor its feed's has our shape. It has no signature to look for and
+/// no provider to check, so it carries no `!` at all: not being signed is not
+/// a fault there, it is what the source is. The card
+/// shows the small feed mark beside the feed's title instead.
+bool postIsOutside(Post post) =>
+    postRefOf(post.url ?? '') == null &&
+    channelBaseOf(post.feedUrl ?? '') == null &&
+    (post.signature?.isEmpty ?? true);
+
 /// The second negative mark: an
 /// amber `!` right of the feed-context line when the post's server is NOT a
 /// registered SSP (Core's `sspRegistrationOf`: one chain read per server,
@@ -286,6 +302,7 @@ class PostServerMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (postIsOutside(post)) return child ?? const SizedBox.shrink();
     final serverUrl = postServerUrlOf(post);
     final known = PublicOSSsp.sspRegistrationIfKnown(serverUrl);
     if (known != null) return _row(context, known);
@@ -670,4 +687,141 @@ class _SignedAuthorNameState extends State<SignedAuthorName>
       child: text,
     );
   }
+}
+
+/// Where "hosted by" would stand when the owner's claim does not let us name
+/// a host: an amber `!` when the channel carries no
+/// owner's signature (there is nothing to check), a red one when a signature
+/// is given and it is bad. No host is named in either case. Tap explains.
+class ChannelHostMark extends StatelessWidget {
+  final bool bad;
+  const ChannelHostMark({super.key, required this.bad});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = GlassTokens.of(context);
+    final l10n = context.l10n;
+    final color = bad ? Theme.of(context).colorScheme.error : tokens.fallbackAccent;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showSignatureNoteDialog(
+        context,
+        accent: color,
+        icon: bad ? Icons.warning_amber_rounded : Icons.edit_off_rounded,
+        title: bad ? l10n.channelHostBadSigTitle : l10n.channelHostNoSigTitle,
+        text: bad ? l10n.channelHostBadSigExplain : l10n.channelHostNoSigExplain,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Semantics(
+          label: bad ? l10n.channelHostBadSigTitle : l10n.channelHostNoSigTitle,
+          child: Text(
+            '!',
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              height: 1.0,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The quiet shield: a signed copy. Everything checks; the post (or the
+/// channel) is only being read somewhere else than the address that was
+/// signed, as an archive or a curated feed serves it. A light green on
+/// purpose, not something to hunt for.
+class SignedCopyBadge extends StatelessWidget {
+  /// True for a channel whose owner signed it at another address; false for
+  /// a post read in a channel that is not its own.
+  final bool channel;
+  final double size;
+  const SignedCopyBadge({super.key, this.channel = false, this.size = 13});
+
+  static const Color green = Color(0xFF8FCFA4);
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => showSignatureNoteDialog(
+        context,
+        accent: green,
+        icon: Icons.verified_user_outlined,
+        title: l10n.signedCopyTitle,
+        text: channel ? l10n.signedCopyChannelExplain : l10n.signedCopyPostExplain,
+      ),
+      child: Semantics(
+        label: l10n.signedCopyTitle,
+        child: Icon(Icons.verified_user_outlined,
+            size: size, color: green.withValues(alpha: 0.85)),
+      ),
+    );
+  }
+}
+
+/// A signed post read in a PublicOS channel that is not its own: the feed it
+/// came in and its own address name different channels. Explore's lists are
+/// not channels, so a post read there is never a copy.
+bool postIsReadElsewhere(Post post) {
+  final own = channelBaseOf(post.url ?? '');
+  final readIn = channelBaseOf(post.feedUrl ?? '');
+  if (own == null || readIn == null) return false;
+  return ChannelClaims.key(own) != ChannelClaims.key(readIn);
+}
+
+/// One sentence in the signature dialog's shell.
+Future<void> showSignatureNoteDialog(
+  BuildContext context, {
+  required Color accent,
+  required IconData icon,
+  required String title,
+  required String text,
+}) {
+  final tokens = GlassTokens.of(context);
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      constraints: const BoxConstraints(
+        minWidth: DialogWidth.min,
+        maxWidth: DialogWidth.s,
+      ),
+      backgroundColor: tokens.surfaceDeep,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: tokens.borderSubtle),
+      ),
+      title: Row(
+        children: [
+          Icon(icon, color: accent, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: accent,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        text,
+        style: TextStyle(color: tokens.starkWhite, fontSize: 13, height: 1.35),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(ctx.l10n.postSigDialogClose),
+        ),
+      ],
+    ),
+  );
 }

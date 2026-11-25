@@ -43,7 +43,8 @@ import 'package:publicos_desktop/router.dart';
 import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/theme/glass_tokens.dart';
 
-/// Runs the four-beat inbox sequence and pops with the result.
+/// Runs the inbox sequence (the chip, the house beat, GENERATE, the SIM, the
+/// register dialog) and pops with the result.
 ///
 /// Returns **true** when the account ends the sequence with an inbox published
 /// on chain, **false** otherwise. The caller re-reads chain state either way —
@@ -62,6 +63,15 @@ class _OnboardingExplorerStageState extends State<OnboardingExplorerStage> {
   final GlobalKey _chipKey = GlobalKey();
   final GlobalKey _generateKey = GlobalKey();
   final GlobalKey _simKey = GlobalKey();
+
+  /// The keychain's title and its session key: the two things the house beat
+  /// points at before anything is generated.
+  final GlobalKey _titleKey = GlobalKey();
+  final GlobalKey _sessionKey = GlobalKey();
+
+  /// When the house beat went up. A tap that lands in its first moments is the
+  /// tail of the tap that opened the keychain, not a "continue".
+  DateTime? _houseShownAt;
 
   /// Set once the sequence has seen a registered inbox. Read on the way out.
   bool _published = false;
@@ -118,20 +128,32 @@ class _OnboardingExplorerStageState extends State<OnboardingExplorerStage> {
     }
     if (!mounted) return;
 
-    _coach.show(
-      context,
-      hasKeys
-          ? CoachMark(
-              targetKey: _simKey,
-              text: context.l10n.onbCoachSim,
-              side: CoachSide.above,
-            )
-          : CoachMark(
-              targetKey: _generateKey,
-              text: context.l10n.onbCoachGenerate,
-              side: CoachSide.above,
-            ),
-    );
+    // With no key yet, the sheet opens on the house beat: the title and the session key in one spotlight, and what a
+    // keychain is, before GENERATE is asked for. It only explains, so a tap
+    // anywhere moves on to GENERATE.
+    if (hasKeys) {
+      _coach.show(
+        context,
+        CoachMark(
+          targetKey: _simKey,
+          text: context.l10n.onbCoachSim,
+          side: CoachSide.above,
+        ),
+      );
+    } else {
+      _houseShownAt = DateTime.now();
+      _coach.show(
+        context,
+        CoachMark(
+          targetKey: _sessionKey,
+          alsoKey: _titleKey,
+          text: context.l10n.onbCoachHouse,
+          side: CoachSide.below,
+          onContinue: _afterHouse,
+          continueLabel: context.l10n.onbCoachContinue,
+        ),
+      );
+    }
 
     // DESKTOP DELTA: the keychain is a dialog here, not a bottom sheet; the
     // coach measures the target's own route, so it stacks the same way.
@@ -141,6 +163,8 @@ class _OnboardingExplorerStageState extends State<OnboardingExplorerStage> {
         onboardingMode: KeychainOnboardingMode.tour,
         tourGenerateKey: _generateKey,
         tourSimKey: _simKey,
+        tourTitleKey: _titleKey,
+        tourSessionKey: _sessionKey,
         // Fires once the key exists — which is exactly when beat 2 finishes,
         // because generating is the only way to change the list in `tour`
         // mode. Advancing on the RESULT rather than on the tap is the same
@@ -156,6 +180,24 @@ class _OnboardingExplorerStageState extends State<OnboardingExplorerStage> {
     // The sheet is gone; its controls cannot be spotlighted any more.
     _coach.hide();
     await _resolve();
+  }
+
+  /// The house beat was read: point at GENERATE.
+  void _afterHouse() {
+    if (!mounted) return;
+    final shown = _houseShownAt;
+    if (shown != null &&
+        DateTime.now().difference(shown) < const Duration(milliseconds: 900)) {
+      return;
+    }
+    _coach.show(
+      context,
+      CoachMark(
+        targetKey: _generateKey,
+        text: context.l10n.onbCoachGenerate,
+        side: CoachSide.above,
+      ),
+    );
   }
 
   void _onKeysChanged() {

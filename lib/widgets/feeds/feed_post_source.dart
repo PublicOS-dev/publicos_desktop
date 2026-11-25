@@ -160,6 +160,10 @@ class FeedPostSource extends PostSource {
   String? _language;
   ChannelStats? _stats;
   String? _postingPolicy;
+
+  /// The channel's `layout` as the server sent it (null from an older
+  /// server); read through [channelLayoutOf] with [_postingPolicy].
+  String? _layout;
   // The server's per-reader "you may post here" (`channel.can_post`, signed
   // interactions only). Null = not asked; then the policy decides.
   bool? _canPost;
@@ -206,10 +210,10 @@ class FeedPostSource extends PostSource {
 
   bool get _isSingleSurface => _singleFeed != null;
 
-  /// Forum-ness comes from the fetch result (`_publicos.posting_policy`),
-  /// never from the URL shape or the first post.
-  bool get _isForum =>
-      _postingPolicy == 'open' || _postingPolicy == 'approved';
+  /// The forum look (sort bar, votes) is the owner's `layout` from the fetch
+  /// result, never who may post, the URL shape or the first post.
+  /// No layout sent = feed.
+  bool get _isForum => channelLayoutOf(_layout) == ChannelLayouts.forum;
 
   bool get _showSortBar => _isForum && _isSingleSurface;
 
@@ -419,6 +423,7 @@ class FeedPostSource extends PostSource {
     _language = null;
     _stats = null;
     _postingPolicy = null;
+    _layout = null;
     _canPost = null;
     _channelIsPrivate = null;
     changed();
@@ -529,6 +534,7 @@ class FeedPostSource extends PostSource {
     _language = r.language;
     _stats = r.stats;
     _postingPolicy = r.postingPolicy;
+    _layout = r.layout;
     // Per reader, never cached: keep the last answer through a cache paint.
     _canPost = r.canPost ?? _canPost;
     _channelIsPrivate = r.isPrivate;
@@ -595,6 +601,7 @@ class FeedPostSource extends PostSource {
       _language = cached.language;
       _stats = cached.stats;
       _postingPolicy = cached.postingPolicy;
+      _layout = cached.layout;
       _channelIsPrivate = cached.isPrivate;
       _hasMore = cached.hasMore;
       _isLoading = false; // the reader can start reading NOW
@@ -1009,6 +1016,53 @@ class FeedPostSource extends PostSource {
     }
   }
 
+  /// The private-feeds banner's quick action: unfollow
+  /// every locked channel of this list, one by one. A followed account's
+  /// channel is muted (the account stays followed, the channel can be turned
+  /// back on from the list manager); a hand-added feed is removed from the
+  /// list. With none left locked, the banner goes away.
+  Future<void> _unfollowLockedChannels(BuildContext context) async {
+    final session = PublicOS.sessionBlockchainAddress;
+    final listId = this.listId;
+    if (listId == null) return;
+    final l10n = context.l10n;
+    final done = <String>{};
+    Object? failure;
+    for (final url in _lockedFeedUrls.toList()) {
+      final origin = _sourceByUrl[url]?.origin;
+      try {
+        if (origin is AccountFeedOrigin && session != null) {
+          await PublicOS.database.muteChannel(
+            session: session,
+            account: origin.accountAddress,
+            listId: listId,
+            recordKey: origin.recordKey,
+          );
+          done.add(url);
+        } else if (origin is ListRowFeedOrigin) {
+          final listFeedId = origin.listFeedId;
+          if (listFeedId == null || listFeedId == -1) continue;
+          if (await PublicOSFeedLists.removeFeedFromList(listId, listFeedId)) {
+            done.add(url);
+          }
+        }
+      } catch (e) {
+        failure = e;
+      }
+    }
+    if (isDisposed) return;
+    if (done.isNotEmpty) {
+      final names = [for (final url in done) _sourceByUrl[url]?.title ?? url];
+      _removedUrls.addAll(done);
+      _posts = _posts.where((post) => !done.contains(post.feedUrl)).toList();
+      _lockedFeedUrls = _lockedFeedUrls.difference(done);
+      changed();
+      _snack(l10n.postsListChannelMuted(names.join(', ')));
+    } else if (failure != null) {
+      _snack(localizedError(l10n, failure));
+    }
+  }
+
   // -----------------------------------------------------------------------
   // REMOVE FEED FROM LIST (hand-added row in a list roster)
   // -----------------------------------------------------------------------
@@ -1084,7 +1138,11 @@ class FeedPostSource extends PostSource {
   @override
   Widget? bannerSlot(BuildContext context) {
     if (!(_isMultiFeed && _lockedFeedUrls.isNotEmpty)) return null;
-    return _PrivateFeedsBanner(tokens: GlassTokens.of(context));
+    return _PrivateFeedsBanner(
+      tokens: GlassTokens.of(context),
+      onUnfollow:
+          _isListSurface ? () => _unfollowLockedChannels(context) : null,
+    );
   }
 
   @override
@@ -1153,6 +1211,9 @@ class FeedPostSource extends PostSource {
       language: _language,
       writers: people?.writers ?? const [],
       ownerWrites: people?.ownerWrites ?? false,
+      // One channel on screen: its credits follow the owner's claim.
+      channelUrl:
+          _effectiveFeeds.length == 1 ? _effectiveFeeds.first.url : null,
       accent: h.accent,
       onFlag: _channelFlagAction(context),
     );
@@ -1288,7 +1349,10 @@ class FeedPostSource extends PostSource {
 
 class _PrivateFeedsBanner extends StatelessWidget {
   final GlassTokens tokens;
-  const _PrivateFeedsBanner({required this.tokens});
+
+  /// Unfollows the locked channels; null hides the button.
+  final VoidCallback? onUnfollow;
+  const _PrivateFeedsBanner({required this.tokens, this.onUnfollow});
 
   @override
   Widget build(BuildContext context) {
@@ -1322,6 +1386,24 @@ class _PrivateFeedsBanner extends StatelessWidget {
               ),
             ),
           ),
+          if (onUnfollow != null) ...[
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: onUnfollow,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: tokens.starkWhite,
+                side: BorderSide(color: tokens.borderSubtle),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: Text(context.l10n.postsListChannelNotFoundUnfollow),
+            ),
+          ],
         ],
       ),
     );

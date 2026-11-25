@@ -144,9 +144,13 @@ class _NewKeyFlowDialogState extends State<_NewKeyFlowDialog> {
     setState(() => _checking = true);
     bool? free;
     try {
-      final taken = await PublicOSContacts.getPublicosAddressByPublicosDisplayName(v);
-      free = taken == null ||
-          taken.eip55With0x.toLowerCase() == '0x0000000000000000000000000000000000000000';
+      // The contract's own verdict, which also reads the reserved and cooldown
+      // list. Only 0 is free here: creating an account never evicts a holder.
+      final status = await PublicOSAccounts.getNameClaimStatus(
+        v,
+        account: EthereumAddress.fromHex('0x0000000000000000000000000000000000000000'),
+      );
+      free = status == 0;
     } catch (_) {
       free = null; // unknown: don't block, the sponsor's tx is the final check
     }

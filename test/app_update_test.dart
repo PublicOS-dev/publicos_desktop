@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -140,5 +141,37 @@ void main() {
     expect(script, contains(r'robocopy "C:\u\update\staged\app" "C:\apps\PublicOS" /E'));
     expect(script, isNot(contains('/MIR')));
     expect(script, contains('publicos.sqlite.before-update'));
+  });
+
+  test('the hand-over script stops waiting and ends the old app', () {
+    final script = AppUpdate.helperScript(
+      pid: 4242,
+      build: 202611151800,
+      source: r'C:\u\update\staged\app',
+      appDir: r'C:\apps\PublicOS',
+      staged: r'C:\u\update\staged',
+      database: r'C:\u\publicos.sqlite',
+      log: r'C:\u\update\update.log',
+    );
+    expect(script, contains('if %WAITED% GEQ ${AppUpdate.waitSeconds}'));
+    expect(script, contains('taskkill /F /PID 4242'));
+    // The copy comes after the wait ends, on either way out of it.
+    expect(script.indexOf(':gone'), lessThan(script.indexOf('robocopy')));
+  });
+
+  test('the hidden start runs a script, in a folder with a space', () async {
+    if (!Platform.isWindows) return;
+    final dir = Directory.systemTemp.createTempSync('upd test ');
+    final marker = File('${dir.path}\\ran.txt');
+    final script = File('${dir.path}\\probe.cmd')
+      ..writeAsStringSync('@echo off\r\ntasklist >nul\r\necho ok > "${marker.path}"\r\n');
+    await AppUpdate.launchHidden(script.path);
+    for (var i = 0; i < 40 && !marker.existsSync(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    expect(marker.existsSync(), isTrue);
+    try {
+      dir.deleteSync(recursive: true);
+    } catch (_) {}
   });
 }

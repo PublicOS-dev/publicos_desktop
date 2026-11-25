@@ -1845,18 +1845,19 @@ Widget _runByRow(
         ),
       ),
       GlassContactIcon(
+        opensProfile: true,
         contact: ownerContact,
         address: owner.eip55With0x,
         size: 22,
       ),
       const SizedBox(width: 8),
       Flexible(
-        child: Text(
+        child: ContactProfileTap(contact: ownerContact, address: owner.eip55With0x, child: Text(
           name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(fontSize: 12, color: tokens.starkWhite),
-        ),
+        )),
       ),
     ],
   );

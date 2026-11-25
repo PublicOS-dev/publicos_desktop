@@ -100,7 +100,7 @@ class _MemberListEditorState extends State<MemberListEditor> {
     final onAdd = widget.onAdd;
     if (onAdd == null || _adding) return;
     final raw = _searchCtrl.text.trim();
-    if (raw.length < 2) return;
+    if (raw.isEmpty) return; // 1 char is a real name (root can grant one)
     setState(() => _adding = true);
     // Username → account address; raw 0x input passes through untouched
     // (the whitelist endpoints never validate that an address is an account).
@@ -150,7 +150,7 @@ class _MemberListEditorState extends State<MemberListEditor> {
                     ),
                     const SizedBox(width: 8),
                     _AddButton(
-                      enabled: _searchCtrl.text.trim().length >= 2 && !_adding,
+                      enabled: _searchCtrl.text.trim().isNotEmpty && !_adding,
                       loading: _adding,
                       onPressed: _submitAdd,
                     ),
@@ -419,7 +419,7 @@ class _MemberRowState extends State<MemberRow> {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
+                      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _openProfile, child: Text(
                         hasName ? displayName : short,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -429,7 +429,7 @@ class _MemberRowState extends State<MemberRow> {
                           fontWeight: FontWeight.w700,
                           fontFamily: hasName ? null : 'monospace',
                         ),
-                      ),
+                      )),
                     ),
                     if (widget.entry.isOrg) ...[
                       const SizedBox(width: 6),

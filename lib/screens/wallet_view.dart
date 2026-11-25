@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -12,6 +13,7 @@ import 'package:publicos_desktop/l10n/l10n_ext.dart';
 import 'package:publicos_desktop/widgets/error/error_l10n.dart';
 import 'package:publicos_desktop/widgets/explorer_chip.dart';
 import 'package:publicos_desktop/widgets/chain_icon.dart';
+import 'package:publicos_desktop/data/chain_registry.dart';
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 import 'package:publicos_desktop/widgets/dashed_add_button.dart';
 import 'package:publicos_desktop/widgets/feeds/emoji_picker_dialog.dart';
@@ -73,6 +75,15 @@ class WalletViewState extends State<WalletView> {
   // blocks on a log scan; empty list = loaded-but-quiet, absent = not loaded.
   final Map<String, List<TokenTransfer>> _txByAddress = {};
   final Set<String> _txLoading = {};
+
+  /// Wallets whose history was never stored on this device and is being read
+  /// from the chain for the first time. Only these reserve the activity
+  /// block's height while they load; every other landing already has its
+  /// lines from the device (see [_primeTransfers]).
+  final Set<String> _txFirstFill = {};
+
+  /// Rows per page: the card's read and each further page of the sheet.
+  static const int _txPage = 25;
 
   /// Counterparty **wallet** address (lowercase) -> their [Contact], for the
   /// history sheet's rows. Two hops, mirroring the notification rows:
@@ -179,6 +190,10 @@ class WalletViewState extends State<WalletView> {
         });
       }
 
+      // What the device already holds of the Safe's history, read before the
+      // card is shown so it lands with its activity lines.
+      if (safeAddress != null) await _primeTransfers(safeAddress);
+
       if (mounted) {
         setState(() {
           _wallets = walletsWithDetails;
@@ -186,8 +201,7 @@ class WalletViewState extends State<WalletView> {
         });
       }
 
-      // Kick off the Safe's activity scan async — the card renders now; the
-      // preview + history sheet fill in when the log scan settles.
+      // Then bring it up to the chain's head in the background.
       if (safeAddress != null) {
         _loadTransfers(safeAddress);
       }
@@ -202,27 +216,61 @@ class WalletViewState extends State<WalletView> {
     }
   }
 
-  /// Scan recent OX transfers for any PublicOS wallet address (Safe, group
-  /// Safe, keychain key) and cache them for the in-card preview + history
-  /// sheet. Async + best-effort — a failure just leaves the preview empty.
-  /// Deduped so overlapping section reloads don't double-scan the same address.
-  /// PublicOS network only for now (Core throws for other chains).
+  /// The device's copy of a wallet's history, read with no chain request
+  /// Called before the card is shown, so the card lands with its
+  /// activity lines and its final height. Sets no state: the caller's own
+  /// `setState` shows it. A wallet never stored here is marked as a first
+  /// fill instead, the one case that reserves the height while it loads.
+  Future<void> _primeTransfers(String walletAddress) async {
+    final key = walletAddress.toLowerCase();
+    if (_txByAddress.containsKey(key)) return;
+    try {
+      final addr = EthereumAddress.fromHex(walletAddress);
+      if (await PublicOSWallets.hasTransferHistory(addr,
+          chainId: PublicOS.CHAIN_ID)) {
+        _txByAddress[key] = await PublicOSWallets.getTransferHistory(addr,
+            chainId: PublicOS.CHAIN_ID, limit: _txPage);
+      } else {
+        _txFirstFill.add(key);
+      }
+    } catch (e) {
+      print('Error reading stored transfers: $e');
+    }
+  }
+
+  /// Bring a PublicOS wallet's stored history (Safe, group Safe, keychain key)
+  /// up to the chain's head, then re-read the first page if anything arrived.
+  /// The first time on a device this reads the whole chain; after that only
+  /// the blocks since the last visit (`PublicOSWallets.syncTransferHistory`).
+  /// Async + best-effort: a failure leaves what was showing. Deduped so
+  /// overlapping section reloads don't sync the same address twice.
+  /// PublicOS network only for now.
   Future<void> _loadTransfers(String walletAddress) async {
     final key = walletAddress.toLowerCase();
     if (_txLoading.contains(key)) return;
     if (mounted) setState(() => _txLoading.add(key));
+    final addr = EthereumAddress.fromHex(walletAddress);
     try {
-      final txs = await PublicOSWallets.getRecentTransfers(
-        EthereumAddress.fromHex(walletAddress),
-        chainId: PublicOS.CHAIN_ID,
-        limit: 25,
-      );
-      if (mounted) setState(() => _txByAddress[key] = txs);
-      await _resolveCounterparties(EthereumAddress.fromHex(walletAddress), txs);
+      final had = _txByAddress[key];
+      // Names for the lines already showing; not awaited, the sync is next.
+      if (had != null) _resolveCounterparties(addr, had);
+      final found = await PublicOSWallets.syncTransferHistory(addr,
+          chainId: PublicOS.CHAIN_ID);
+      if (found || had == null) {
+        final txs = await PublicOSWallets.getTransferHistory(addr,
+            chainId: PublicOS.CHAIN_ID, limit: _txPage);
+        if (mounted) setState(() => _txByAddress[key] = txs);
+        await _resolveCounterparties(addr, txs);
+      }
     } catch (e) {
       print('Error loading transfers: $e');
     } finally {
-      if (mounted) setState(() => _txLoading.remove(key));
+      if (mounted) {
+        setState(() {
+          _txLoading.remove(key);
+          _txFirstFill.remove(key);
+        });
+      }
     }
   }
 
@@ -425,6 +473,7 @@ class WalletViewState extends State<WalletView> {
             };
 
             // Group Safes are PublicOS addresses too — load their activity.
+            await _primeTransfers(mainWalletAddress);
             _loadTransfers(mainWalletAddress);
 
             if (mounted) {
@@ -524,6 +573,7 @@ class WalletViewState extends State<WalletView> {
           final balanceEth = balanceWei.toDouble() / 1e18;
 
           // Keychain keys are PublicOS addresses — load their activity too.
+          await _primeTransfers(address);
           _loadTransfers(address);
 
           keychainWalletsWithBalances.add({
@@ -1786,15 +1836,16 @@ class WalletViewState extends State<WalletView> {
                             ],
                           ),
                         ),
-                        // Hidden while this wallet's transfers load, so the
-                        // card settles once instead of twice.
-                        if (!_txLoadingFor(address)) ...[
+                        // There from the first frame: the
+                        // buttons no longer wait for the history.
                           const SizedBox(width: 8),
                           _buildWalletActionRow(
                             name: name,
                             address: address,
                             balance: balance,
-                            emoji: emoji,
+                            // The icon the card shows (the user's own pick
+                            // first), so the manager's key chip matches it.
+                            emoji: customIcon ?? emoji,
                             isSmallScreen: isSmallScreen,
                             isGroup: isGroup,
                             isKeychain: isKeychain,
@@ -1806,7 +1857,6 @@ class WalletViewState extends State<WalletView> {
                             accountAddress: accountAddress,
                             isLinked: isLinked,
                           ),
-                        ],
                       ],
                     ),
                   ],
@@ -1910,6 +1960,10 @@ class WalletViewState extends State<WalletView> {
         'address': address,
         'balance': balance,
         'emoji': emoji,
+        // The sheet must know whether this device holds the wallet's key:
+        // without it every wallet read as watched (and could be signed for
+        // with the account's own key).
+        'isKeychain': isKeychain,
       },
       isSmallScreen: isSmallScreen,
     );
@@ -1922,7 +1976,12 @@ class WalletViewState extends State<WalletView> {
       mainAxisSize: MainAxisSize.min,
       children: [
         sendButton,
-        if (!isGroup) ...[
+        // No Manage on the account's own MainSafe: the
+        // button opens the chosen wallet-manager app (Zerion by default), and
+        // no manager website can manage this Safe. It comes back when we have
+        // our own screen for it (modules and the rest). Keychain and linked
+        // wallets keep theirs.
+        if (!isGroup && !isMainSafe) ...[
           const SizedBox(width: 8),
           manageButton,
         ],
@@ -1930,12 +1989,12 @@ class WalletViewState extends State<WalletView> {
     );
   }
 
-  /// Is this wallet's transfer list still loading? Single source for the
-  /// hide-while-loading rule, used by both the action row and the activity
-  /// line so they can never disagree.
+  /// Is this wallet's history being read for the FIRST time on this device,
+  /// with nothing to show yet? The one state that reserves the activity
+  /// block's height (see [_activityBelowBalance]).
   bool _txLoadingFor(String address) {
     final key = address.toLowerCase();
-    return _txLoading.contains(key) && _txByAddress[key] == null;
+    return _txFirstFill.contains(key) && _txByAddress[key] == null;
   }
 
   /// Activity under the balance.
@@ -1948,9 +2007,44 @@ class WalletViewState extends State<WalletView> {
   ///    it would differ in height from the two preview lines that replace it,
   ///    the card would visibly jump when it resolves;
   ///  * a quiet wallet shows nothing rather than an "Activity" affordance —
-  ///    that button would lead to a history sheet with nothing in it.
+  ///    that button led to a history sheet with nothing in it.
+  ///
+  /// The lines come from the device, so a landing normally
+  /// has them (or knows there are none) on its first frame. The exception is
+  /// a wallet's first-ever read on this device: its height is RESERVED, two
+  /// invisible lines, so the card does not grow when they arrive. A wallet that turns out quiet
+  /// gives the space back, that one time.
   List<Widget> _activityBelowBalance(String address) {
-    if (_txLoadingFor(address)) return const [];
+    if (_txLoadingFor(address)) {
+      final zero =
+          EthereumAddress.fromHex('0x0000000000000000000000000000000000000000');
+      final blank = TokenTransfer(
+        from: zero,
+        to: zero,
+        rawAmount: BigInt.zero,
+        blockNumber: 0,
+        timestamp: DateTime.now(),
+        txHash: '',
+        logIndex: 0,
+      );
+      return [
+        const SizedBox(height: 10),
+        Visibility(
+          visible: false,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _txPreviewLine(blank, address),
+              _txPreviewLine(blank, address),
+            ],
+          ),
+        ),
+      ];
+    }
     final txs = _txByAddress[address.toLowerCase()];
     if (txs == null || txs.isEmpty) return const [];
     return [
@@ -2014,6 +2108,17 @@ class WalletViewState extends State<WalletView> {
         transfers: _txByAddress[key] ?? const [],
         loading: _txLoading.contains(key),
         counterparties: _cpByWallet,
+        pageSize: _txPage,
+        // Older pages come from the device, never the chain. The names for
+        // the new rows are resolved before the page is handed back (the map
+        // above is this view's own, so the sheet sees them).
+        onLoadMore: (last) async {
+          final addr = EthereumAddress.fromHex(address);
+          final page = await PublicOSWallets.getTransferHistory(addr,
+              chainId: PublicOS.CHAIN_ID, limit: _txPage, before: last);
+          await _resolveCounterparties(addr, page);
+          return page;
+        },
       ),
     );
   }
@@ -2099,11 +2204,40 @@ class WalletViewState extends State<WalletView> {
     final signingKey = await _resolveManagedSigningKey(wallet);
     if (!mounted) return;
 
+    // A keychain wallet is one whose key this device holds. Anything else
+    // that reaches the manager (a linked address) is WATCHED: the page may be
+    // shown it, nothing here signs for it.
+    final watchOnly = wallet['isKeychain'] != true;
+    // The dialog's own state: the key chip's tap, the page's chain for the
+    // chip's corner mark, and the "can't sign" notice.
+    var permissionsRevision = 0;
+    String? chainHex;
+    var noticeUp = false;
+    Timer? noticeTimer;
+
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black54,
-      builder: (dialogCtx) {
+      builder: (dialogCtx) => StatefulBuilder(builder: (dialogCtx, setDialog) {
         final tokens = GlassTokens.of(dialogCtx);
+        void setChain(String id) {
+          // May arrive while the dialog is still building its child.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (dialogCtx.mounted && chainHex != id) {
+              setDialog(() => chainHex = id);
+            }
+          });
+        }
+
+        void showCantSign() {
+          if (!dialogCtx.mounted) return;
+          noticeTimer?.cancel();
+          setDialog(() => noticeUp = true);
+          noticeTimer = Timer(const Duration(seconds: 4), () {
+            if (dialogCtx.mounted) setDialog(() => noticeUp = false);
+          });
+        }
+
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
@@ -2115,8 +2249,19 @@ class WalletViewState extends State<WalletView> {
                 color: tokens.surfaceDeep,
                 child: Column(
                   children: [
-                    _walletManagerBar(dialogCtx, tokens, app, wallet),
+                    _walletManagerBar(
+                      dialogCtx,
+                      tokens,
+                      app,
+                      wallet,
+                      watchOnly: watchOnly,
+                      chainHex: chainHex,
+                      onKeyTap: () => setDialog(() => permissionsRevision++),
+                    ),
                     Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
                       child: PublicOSWebView(
                         initialUrl: app.url!,
                         // Its own jar: the wallet dApp never shares cookies
@@ -2126,15 +2271,66 @@ class WalletViewState extends State<WalletView> {
                         ),
                         overrideAccountAddress: wallet['address'] as String?,
                         overrideSigningKey: signingKey,
-                        // No `grantsRevision`: a manager is pinned to ONE
-                        // wallet, so its permission cannot change underneath it
-                        // — `availableKeys()` is the pin alone and the picker
-                        // has nothing to offer. The old `webSelectedKey:` here
-                        // was already inert (the pin wins in `WalletBinding`)
-                        // and is deleted rather than adapted.
+                        overrideWatchOnly: watchOnly,
+                        // The key chip in the bar opens this site's permission
+                        // for the ONE pinned key, through the page's own gate
+                        // No `grantsRevision`: nothing outside
+                        // this dialog changes the pin's permission while it is
+                        // open.
+                        permissionsRevision: permissionsRevision,
+                        onNoSigningKey: showCantSign,
+                        onChainRegistryCreated: (r) =>
+                            setChain(r.currentChainId),
+                        onChainChanged: setChain,
                         // A manager stays on its own site. Origin-level, so its
                         // own internal navigation is unaffected.
                         scope: WebScope.of(url),
+                      ),
+                          ),
+                          // "This wallet can't sign", over the page.
+                          Positioned(
+                            left: 16,
+                            right: 16,
+                            bottom: 16,
+                            child: IgnorePointer(
+                              child: AnimatedOpacity(
+                                opacity: noticeUp ? 1 : 0,
+                                duration: const Duration(milliseconds: 180),
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: Color.alphaBlend(
+                                          tokens.glassFillHover,
+                                          tokens.surfaceElevated),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.visibility_outlined,
+                                            size: 16, color: tokens.textDim),
+                                        const SizedBox(width: 10),
+                                        Flexible(
+                                          child: Text(
+                                            dialogCtx
+                                                .l10n.walletWatchOnlyCantSign,
+                                            style: TextStyle(
+                                              color: tokens.starkWhite,
+                                              fontSize: 13,
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -2143,8 +2339,9 @@ class WalletViewState extends State<WalletView> {
             ),
           ),
         );
-      },
+      }),
     );
+    noticeTimer?.cancel();
   }
 
   /// The header strip above the manager webview: whose wallet, which app, and
@@ -2154,9 +2351,14 @@ class WalletViewState extends State<WalletView> {
     BuildContext ctx,
     GlassTokens tokens,
     dynamic app,
-    Map<String, dynamic> wallet,
-  ) {
+    Map<String, dynamic> wallet, {
+    required bool watchOnly,
+    required String? chainHex,
+    required VoidCallback onKeyTap,
+  }) {
     final address = wallet['address'] as String? ?? '';
+    final emoji = wallet['emoji'] as String?;
+    final chain = chainIdFromHex(chainHex);
     final short = address.length > 12
         ? '${address.substring(0, 6)}...${address.substring(address.length - 4)}'
         : address;
@@ -2170,8 +2372,48 @@ class WalletViewState extends State<WalletView> {
       ),
       child: Row(
         children: [
-          Icon(Icons.account_balance_wallet_outlined,
-              size: 16, color: tokens.textDim),
+          // The key chip: this wallet's emoji with the page's chain on its
+          // corner, the mark the browser's own chip carries. A tap opens this
+          // site's permission for THIS key and no other.
+          InkResponse(
+            radius: 22,
+            onTap: onKeyTap,
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Center(
+                      child: watchOnly
+                          ? Icon(Icons.visibility_outlined,
+                              size: 17, color: tokens.starkWhite)
+                          : emoji != null
+                              ? Text(emoji,
+                                  style:
+                                      const TextStyle(fontSize: 17, height: 1))
+                              : Icon(Icons.key_outlined,
+                                  size: 17, color: tokens.starkWhite),
+                    ),
+                  ),
+                  if (chain != null)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        padding: const EdgeInsets.all(1.5),
+                        decoration: BoxDecoration(
+                          color: tokens.surfaceElevated,
+                          shape: BoxShape.circle,
+                        ),
+                        child: NftChainIcon(chain: chain, size: 13),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(width: 10),
           Text(
             app.displayName as String? ?? 'Wallet manager',
@@ -2203,11 +2445,11 @@ class WalletViewState extends State<WalletView> {
 
   /// Which key signs for the managed wallet.
   ///
-  /// A keychain wallet signs with its OWN key; a Safe (main or group), or a
-  /// link whose key we do not hold, falls back to the account owner key for
-  /// now — EIP-1271 / Safe routing is still deferred. Copied from the client's
-  /// `_resolveManagedSigningKey` so the two cannot disagree about which key a
-  /// managed wallet signs with.
+  /// A keychain wallet signs with its OWN key, and NOTHING else signs here.
+  /// A wallet whose key we do not hold must not fall back to the account's
+  /// own key: that produces signatures that do not recover to the address the
+  /// page was shown. Null = a watched wallet. Twin of the client's
+  /// `_resolveManagedSigningKey`.
   Future<EthPrivateKey?> _resolveManagedSigningKey(
       Map<String, dynamic> wallet) async {
     EthPrivateKey? key;
@@ -2221,9 +2463,9 @@ class WalletViewState extends State<WalletView> {
         if (hex != null) key = EthPrivateKey.fromHex(hex);
       }
     } catch (_) {
-      // Fall through to the owner key.
+      // No key: the wallet is watched, and a signature request says so.
     }
-    return key ?? PublicOS.currentBlockchainPrivateKey;
+    return key;
   }
 }
 

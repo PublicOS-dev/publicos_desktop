@@ -491,11 +491,20 @@ class _ComposePostPageState extends State<ComposePostPage> {
     return truncatedAddress(address);
   }
 
-  /// Stored contacts matching the active @-trigger, cap 8. (No commenters
+  /// The chain half of the mention list: the holder of the typed name.
+  late final MentionChainLookup _mentionChain = MentionChainLookup(() {
+    if (mounted) setState(() {});
+  });
+
+  /// Stored contacts matching the active @-trigger, plus the account the
+  /// chain says holds the typed name (first row), cap 8. (No commenters
   /// source here — a fresh post has none.)
   List<MentionCandidate> get _mentionCandidates {
     final t = _bodyCtrl.trigger;
-    if (t == null) return const [];
+    if (t == null) {
+      _mentionChain.resultFor(null);
+      return const [];
+    }
     final q = t.query.toLowerCase();
     final out = <MentionCandidate>[];
     for (final c in _storedContacts) {
@@ -508,9 +517,9 @@ class _ComposePostPageState extends State<ComposePostPage> {
       }
       out.add(MentionCandidate(
           address: addr, display: c.displayName, contact: c));
-      if (out.length >= 8) break;
     }
-    return out;
+    return rankMentionCandidates(
+        out, t.query, _mentionChain.resultFor(t.query));
   }
 
   void _pickMention(MentionCandidate c) {
@@ -569,6 +578,7 @@ class _ComposePostPageState extends State<ComposePostPage> {
 
   @override
   void dispose() {
+    _mentionChain.dispose();
     _bodyCtrl.dispose();
     _titleCtrl.dispose();
     _summaryCtrl.dispose();
@@ -650,7 +660,9 @@ class _ComposePostPageState extends State<ComposePostPage> {
       final p = widget.existing!;
       return (
         slug: p.channelSlug ?? _channel?.slug ?? '',
-        owner: p.feedFoundAtAccountAddress ?? _channel?.ownerAddress,
+        owner: p.channelOwnerAddress ??
+            p.feedFoundAtAccountAddress ??
+            _channel?.ownerAddress,
         server: p.serverAddress ?? _channel?.serverAddress,
       );
     }

@@ -79,8 +79,19 @@ Future<OwnWalletScan> scanOwnReceivingWallets(EthereumAddress account) async {
       if (seen.add(w.address.toLowerCase())) out.add(w);
     }
   }
+  // Only a complete answer is remembered: a short set must not stand in for
+  // the real one on the next screen that opens.
+  if (complete) _lastScan[account.eip55With0x.toLowerCase()] = out;
   return (wallets: out, complete: complete);
 }
+
+/// The last COMPLETE set worked out for an account this run (the app's wallet
+/// sweep fills it at start), so a screen can name the user's wallets at once
+/// and refresh behind. null = none yet.
+List<OwnWallet>? lastOwnReceivingWallets(EthereumAddress account) =>
+    _lastScan[account.eip55With0x.toLowerCase()];
+
+final Map<String, List<OwnWallet>> _lastScan = {};
 
 /// The list alone, for callers that only render it.
 Future<List<OwnWallet>> loadOwnReceivingWallets(EthereumAddress account) async =>
@@ -93,9 +104,11 @@ const _SourceResult _sourceFailed = (wallets: <OwnWallet>[], ok: false);
 
 Future<_SourceResult> _personal(EthereumAddress me) async {
   try {
-    final safe = await PublicOSSafe.getMainSafeAddress(me);
-    // A null Safe is a real answer — this account has none — not a failure.
-    if (safe == null) return (wallets: <OwnWallet>[], ok: true);
+    // Stored on the contact once known (a MainSafe never changes), so this is
+    // a local read after the first time. Every account has one: null means
+    // the lookup could not answer, which is a failure to retry, not "none".
+    final safe = await PublicOSContacts.mainSafeOf(me);
+    if (safe == null) return _sourceFailed;
     return (
       wallets: [
         OwnWallet(
@@ -133,13 +146,20 @@ Future<_SourceResult> _orgs(EthereumAddress me) async {
 
 Future<_SourceResult> _oneOrg(EthereumAddress org) async {
   try {
-    final res = await Future.wait([
-      PublicOSContacts.fetchContact(org),
-      PublicOSSafe.getMainSafeAddress(org),
-    ]);
-    final contact = res[0] as Contact?;
-    final safe = res[1] as String?;
-    if (safe == null) return (wallets: <OwnWallet>[], ok: true);
+    // Local first: an org we already hold is not re-read from the
+    // chain here, and its Safe is permanent. Only an org we do not know costs
+    // a profile fetch, and that copy is kept.
+    var contact = await PublicOSContacts.getContact(org);
+    if (contact == null) {
+      try {
+        contact = await PublicOSContacts.fetchContact(org, requireRecords: true);
+        await PublicOSContacts.saveContact(contact);
+      } catch (e) {
+        debugPrint('[own_wallets] org profile fetch failed for $org: $e');
+      }
+    }
+    final safe = contact?.mainSafe ?? await PublicOSContacts.mainSafeOf(org);
+    if (safe == null) return _sourceFailed;
     return (
       wallets: [
         OwnWallet(

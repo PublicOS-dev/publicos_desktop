@@ -34,8 +34,7 @@ String? feedLinkOf(Post post) {
   final addr = post.feedFoundAtAccountAddress;
   final key = post.feedRecordKey;
   if (addr == null || addr.isEmpty || key == null || key.isEmpty) return null;
-  return 'https://publicos.dev/publicosAddress/$addr/tab/'
-      '${Uri.encodeComponent(key)}';
+  return tabShareLink(foundAtAddress: addr, tabKey: key);
 }
 
 /// [post] stamped for "Go to feed" from a pinned card's [feedLink]: the

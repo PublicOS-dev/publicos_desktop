@@ -975,10 +975,10 @@ class _UserAccountSettingsState extends State<UserAccountSettings> {
       ),
       child: Row(
         children: [
-          GlassContactIcon(contact: contact, size: 40),
+          GlassContactIcon(opensProfile: true, contact: contact, size: 40),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            child: ContactProfileTap(contact: contact, child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -1001,7 +1001,7 @@ class _UserAccountSettingsState extends State<UserAccountSettings> {
                   ),
                 ),
               ],
-            ),
+            )),
           ),
           InkResponse(
             onTap: () => _removeRecoveryContact(contact.publicosAddress!),
@@ -1675,16 +1675,20 @@ class _AddRecoveryContactSheetState extends State<AddRecoveryContactSheet> {
         const SizedBox(height: 6),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2.0),
-          child: Text(
-            contact.displayName,
-            style: TextStyle(
-              fontFamily: 'SpaceGrotesk',
-              fontSize: textSize,
-              color: tokens.starkWhite,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onContactSelected(contact),
+            child: Text(
+              contact.displayName,
+              style: TextStyle(
+                fontFamily: 'SpaceGrotesk',
+                fontSize: textSize,
+                color: tokens.starkWhite,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

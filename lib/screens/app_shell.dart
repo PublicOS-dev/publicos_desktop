@@ -13,6 +13,7 @@ import '../widgets/bsp_dialog.dart';
 import '../widgets/chat_appearance.dart';
 import '../widgets/constellation_background.dart';
 import '../widgets/keychain_dialog.dart';
+import '../widgets/chat_no_key_state.dart' show xmtpKeyEpoch;
 import '../widgets/wallet_dialog.dart';
 import '../widgets/shell_morph.dart';
 import '../widgets/shell_split.dart';
@@ -486,7 +487,10 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _openNotifications() async {
-    await showNotificationsDialog(context);
+    // The badge sits in the status bar behind the dialog: it follows as soon
+    // as the list marks its rows read, not only when the dialog closes.
+    await showNotificationsDialog(context,
+        onMarkedRead: () => unawaited(_refreshUnreadCount()));
     if (!mounted) return;
     // The list marks everything read on open — re-read so the badge follows.
     await _refreshUnreadCount();
@@ -695,6 +699,8 @@ class _AppShellState extends State<AppShell> {
         _messagesEpoch++;
         _messagesBadge = 0; // the count belonged to the previous inbox
       });
+      // A chat tab open in another pane (Contacts) rebuilds on this.
+      xmtpKeyEpoch.value++;
     }
     _loadXmtpIdentity();
   }
@@ -806,22 +812,26 @@ class _AppShellState extends State<AppShell> {
   /// The flag is set only after a successful resolve, so a boot with no chain
   /// connectivity retries next launch. Best-effort, never blocks the shell.
   Future<void> _ensurePublicosOnboarded() async {
-    for (final (name, flag) in _defaultFollows) {
-      await _ensureDefaultFollow(name, flag);
+    for (final (name, flag, muted) in _defaultFollows) {
+      await _ensureDefaultFollow(name, flag, muted);
     }
   }
 
   /// The accounts every new account follows into the default list, each with
-  /// its OWN one-time flag. Twin of the client's `explorer.dart` list; same
-  /// flag keys.
-  static const List<(String, String)> _defaultFollows = [
-    (_publicosOrgName, _publicosOnboardedFlag),
-    ('jmsl', 'jmsl_default_follow'),
+  /// its OWN one-time flag. Twin of the client's `explorer.dart` list; same flag keys.
+  /// The third field lists channels (the owner's `record.key`) that start
+  /// muted in that follow, shown as turned off: Backstage is TheOrg's private
+  /// channel, and a default follow of it gave newcomers the "private feed"
+  /// warning.
+  static const List<(String, String, List<String>)> _defaultFollows = [
+    (_publicosOrgName, _publicosOnboardedFlag, []),
+    ('jmsl', 'jmsl_default_follow', []),
     // TheOrg lists the channels its members run (Diez Palomas, Backstage).
-    ('TheOrg', 'theorg_default_follow'),
+    ('TheOrg', 'theorg_default_follow', ['channel.backstage']),
   ];
 
-  Future<void> _ensureDefaultFollow(String name, String flag) async {
+  Future<void> _ensureDefaultFollow(
+      String name, String flag, List<String> muted) async {
     try {
       final already = await PublicOSSettings.getSetting(flag);
       if (already?.value == 'true') return;
@@ -830,6 +840,8 @@ class _AppShellState extends State<AppShell> {
       if (org == null || org.publicosAddress == null) return;
 
       await PublicOSContacts.saveContact(org);
+      // A default follow is a starred contact.
+      await PublicOSContacts.setStarred(org, true);
 
       final following = await _ensureDefaultList();
       final session = PublicOS.sessionBlockchainAddress;
@@ -840,6 +852,14 @@ class _AppShellState extends State<AppShell> {
         account: org.publicosAddress!.eip55With0x,
         listId: following.id,
       );
+      for (final key in muted) {
+        await PublicOS.database.muteChannel(
+          session: session,
+          account: org.publicosAddress!.eip55With0x,
+          listId: following.id,
+          recordKey: key,
+        );
+      }
 
       await PublicOSSettings.setSetting(
         flag,

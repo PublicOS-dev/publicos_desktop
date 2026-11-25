@@ -8,6 +8,7 @@ import 'package:publicos_desktop/widgets/feeds/comment_section.dart';
 import 'package:publicos_desktop/widgets/feeds/mention_suggestions.dart';
 import 'package:publicos_desktop/widgets/feeds/mention_text.dart';
 import 'package:publicos_desktop/widgets/feeds/post_card.dart';
+import 'package:publicos_desktop/widgets/feeds/post_title_bar.dart';
 import 'package:publicos_desktop/widgets/media_overlay.dart' show VideoHandoff;
 import 'package:publicos_desktop/widgets/glass_contact_icon.dart';
 import 'package:publicos_desktop/router.dart';
@@ -167,7 +168,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
     final me = _myAddress;
     final post = _post;
     if (me == null || post.uid.isEmpty) return false;
-    final author = post.feedFoundAtAccountAddress?.toLowerCase();
+    final author = post.postAuthorAddress?.toLowerCase();
     final owner = post.channelOwnerAddress?.toLowerCase();
     final mine = me.toLowerCase();
     return author == mine || owner == mine;
@@ -189,6 +190,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _mentionChain.dispose();
     _composerCtrl.dispose();
     _composerFocus.dispose();
     _mentionResolver.dispose();
@@ -484,12 +486,21 @@ class _PostDetailPageState extends State<PostDetailPage> {
     return truncatedAddress(address);
   }
 
-  /// Candidates for the active trigger: other commenters on this post first
+  /// The chain half of the mention list: the holder of the typed name.
+  late final MentionChainLookup _mentionChain = MentionChainLookup(() {
+    if (mounted) setState(() {});
+  });
+
+  /// Candidates for the active trigger: the account the chain says holds
+  /// the typed name, then exact names, then other commenters on this post
   /// (most likely reply targets), then stored contacts. Deduped by address,
   /// filtered by the query against name or address prefix.
   List<MentionCandidate> get _mentionCandidates {
     final t = _composerCtrl.trigger;
-    if (t == null) return const [];
+    if (t == null) {
+      _mentionChain.resultFor(null);
+      return const [];
+    }
     final q = t.query.toLowerCase();
     final out = <MentionCandidate>[];
     final seen = <String>{};
@@ -517,7 +528,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
       if (addr == null) continue;
       add(addr, c.displayName, c);
     }
-    return out.length > 8 ? out.sublist(0, 8) : out;
+    return rankMentionCandidates(
+        out, t.query, _mentionChain.resultFor(t.query));
   }
 
   void _pickMention(MentionCandidate c) {
@@ -658,17 +670,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
           ),
-          title: Text(
-            appBarTitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: tokens.starkWhite,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4,
-            ),
-          ),
+          // The channel's title, then "hosted by owner" when the owner's
+          // claim says so (post_title_bar.dart).
+          title: PostTitleBar(post: post, title: appBarTitle),
           centerTitle: false,
         ),
         body: Column(
@@ -701,6 +705,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         // "on <account>/<feed>" under the name, as the
                         // focused media shows it.
                         showFeedContext: true,
+                        // The bar above already carries the title.
+                        titleInBar: true,
                         interactive: false,
                         initialHeroPage: widget.initialHeroPage,
                         videoHandoff: widget.videoHandoff,

@@ -229,6 +229,16 @@ class _SelectAccountScreenState extends State<SelectAccountScreen> {
       // mine?" — without it every post in the feed looks like someone else's.
       await AppStateNotifier.loadMyContact();
 
+      // What this account still has to sign on its server (non-blocking, never
+      // fails the boot): the owner's claim on each channel, and posts from
+      // before a signature named the post's own address. Client parity
+      // (app_initializer.runBoot); one isolated block in Core
+      // (PublicOSSignatureBacklog), whose post half is temporary.
+      PublicOSSignatureBacklog.run().catchError((e) {
+        debugPrint('SelectAccount: signature backlog failed: $e');
+        return (channels: 0, posts: 0, failed: 0);
+      });
+
       // Non-blocking conversation sync.
       if (PublicOS.clientXmtpInboxId != null) {
         PublicOSConversations.syncAll(

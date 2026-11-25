@@ -896,6 +896,7 @@ class _DirectoryNodeRow extends StatelessWidget {
                 ),
                 if (contact != null) ...[
                   GlassContactIcon(
+                    opensProfile: true,
                     contact: contact,
                     address: entry.ownerAddress.eip55With0x,
                     size: 20,
@@ -910,7 +911,7 @@ class _DirectoryNodeRow extends StatelessWidget {
                   const SizedBox(width: 4),
                 ],
                 Flexible(
-                  child: Text(
+                  child: ContactProfileTap(contact: contact, address: entry.ownerAddress.eip55With0x, child: Text(
                     displayName,
                     style: TextStyle(
               fontFamily: 'SpaceGrotesk',
@@ -920,7 +921,7 @@ class _DirectoryNodeRow extends StatelessWidget {
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                  ),
+                  )),
                 ),
               ],
             ),
